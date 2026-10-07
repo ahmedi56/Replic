@@ -1,0 +1,12 @@
+node_modules
+.next
+.env
+dev.db
+dev.db-journal
+storage/
+*.tsbuildinfo
+next-env.d.ts
+dev.db-wal
+dev.db-shm
+.env.local
+.commandcode/

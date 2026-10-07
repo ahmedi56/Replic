@@ -1,0 +1,213 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+  Reclip design tokens.
+  Deep navy carries structure, teal carries confidence and success. Everything else is
+  restraint: hairline borders, one shadow level, numbers set in a tabular face so columns
+  of money line up.
+*/
+:root {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+
+  --surface: #ffffff;
+  --surface-sunken: #f8fafc;
+  --surface-raised: #ffffff;
+  --border: #e2e8f0;
+  --border-strong: #cbd5e1;
+  --text: #0b1220;
+  --text-muted: #64748b;
+  --text-subtle: #94a3b8;
+  --accent: #10b981;
+  --accent-ink: #047857;
+  --warn: #d97706;
+  --warn-bg: #fffbeb;
+  --danger: #dc2626;
+  --danger-bg: #fef2f2;
+}
+
+:root[data-theme='dark'] {
+  --surface: #0b1220;
+  --surface-sunken: #060b14;
+  --surface-raised: #121a28;
+  --border: #1d2739;
+  --border-strong: #2e3a50;
+  --text: #e8edf5;
+  --text-muted: #8f9cb5;
+  --text-subtle: #647490;
+  --accent: #34d399;
+  --accent-ink: #6ee7b7;
+  --warn: #fbbf24;
+  --warn-bg: #2a2110;
+  --danger: #f87171;
+  --danger-bg: #2a1414;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --surface: #0b1220;
+    --surface-sunken: #060b14;
+    --surface-raised: #121a28;
+    --border: #1d2739;
+    --border-strong: #2e3a50;
+    --text: #e8edf5;
+    --text-muted: #8f9cb5;
+    --text-subtle: #647490;
+    --accent: #34d399;
+    --accent-ink: #6ee7b7;
+    --warn: #fbbf24;
+    --warn-bg: #2a2110;
+    --danger: #f87171;
+    --danger-bg: #2a1414;
+  }
+}
+
+* {
+  border-color: var(--border);
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background: var(--surface-sunken);
+  color: var(--text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  /* Nothing in this product should ever scroll sideways. */
+  overflow-x: hidden;
+}
+
+@layer components {
+  .card {
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+  }
+
+  .num {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum';
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition-colors;
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2;
+    outline-color: var(--accent);
+  }
+  .btn:focus-visible {
+    box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent);
+  }
+  .btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+
+  .btn-primary {
+    background: var(--text);
+    color: var(--surface);
+  }
+  .btn-primary:hover:not(:disabled) {
+    opacity: 0.88;
+  }
+
+  .btn-accent {
+    background: var(--accent);
+    color: #04241a;
+  }
+  .btn-accent:hover:not(:disabled) {
+    filter: brightness(1.06);
+  }
+
+  .btn-ghost {
+    background: transparent;
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+  .btn-ghost:hover:not(:disabled) {
+    background: var(--surface-sunken);
+  }
+
+  .btn-danger {
+    background: transparent;
+    color: var(--danger);
+    border: 1px solid var(--border);
+  }
+  .btn-danger:hover:not(:disabled) {
+    background: var(--danger-bg);
+  }
+
+  .input {
+    @apply w-full rounded-lg px-3 py-2 text-sm;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+  }
+  .input:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+  }
+  .input::placeholder {
+    color: var(--text-subtle);
+  }
+
+  .label {
+    @apply mb-1.5 block text-xs font-medium;
+    color: var(--text-muted);
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium;
+  }
+
+  .table-head {
+    @apply px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide;
+    color: var(--text-subtle);
+  }
+
+  .table-cell {
+    @apply px-4 py-3 text-sm align-middle;
+  }
+
+  .link {
+    color: var(--accent-ink);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+}
+
+/* Respect a user's reduced-motion preference everywhere. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+::selection {
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+/* The full logo is artwork on a white ground; keep it on white in dark mode. */
+.logo-full {
+  display: block;
+  border-radius: 10px;
+}
+:root[data-theme='dark'] .logo-full {
+  background: #ffffff;
+  padding: 4px 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .logo-full {
+    background: #ffffff;
+    padding: 4px 10px;
+  }
+}
