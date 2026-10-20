@@ -1,68 +1,48 @@
 /**
- * Apply the generated SQL migrations with the same SQLite driver the app uses.
+ * Apply the SQL migrations in ./drizzle to the database named by DATABASE_URL.
  *
- * Drizzle Kit generates the SQL (`drizzle-kit generate`); this applies it, so the setup step
- * needs no database CLI and no server.
- *
- * Applied migrations are recorded in `__migrations`, so running this repeatedly is safe.
+ * Drizzle Kit generates the SQL (`npm run db:generate`); this applies it with Drizzle's own
+ * migrator, which records what has run, so running it repeatedly is safe. It works against a
+ * PostgreSQL server (`postgres://...`) and the embedded development database (`pglite:...`).
  */
-import Database from 'better-sqlite3';
 import fs from 'node:fs';
 import path from 'node:path';
+import { Pool } from 'pg';
+import { PGlite } from '@electric-sql/pglite';
+import { drizzle as drizzlePg } from 'drizzle-orm/node-postgres';
+import { migrate as migratePg } from 'drizzle-orm/node-postgres/migrator';
+import { drizzle as drizzlePglite } from 'drizzle-orm/pglite';
+import { migrate as migratePglite } from 'drizzle-orm/pglite/migrator';
 
-const MIGRATIONS_DIR = path.resolve(process.cwd(), 'drizzle');
-
-function main(): void {
-  const file = (process.env.DATABASE_URL ?? 'file:./dev.db').replace(/^file:/, '');
-  const dir = path.dirname(path.resolve(file));
-  fs.mkdirSync(dir, { recursive: true });
-
-  const db = new Database(path.resolve(file));
-  db.pragma('foreign_keys = OFF'); // relaxed while tables are being created
-  db.exec('CREATE TABLE IF NOT EXISTS __migrations (name TEXT PRIMARY KEY, applied_at INTEGER NOT NULL)');
-
-  if (!fs.existsSync(MIGRATIONS_DIR)) {
-    console.error(`No migrations found in ${MIGRATIONS_DIR}. Run: npx drizzle-kit generate`);
-    process.exit(1);
-  }
-
-  const applied = new Set(
-    (db.prepare('SELECT name FROM __migrations').all() as Array<{ name: string }>).map((r) => r.name),
-  );
-
-  const pending = fs
-    .readdirSync(MIGRATIONS_DIR)
-    .filter((f) => f.endsWith('.sql'))
-    .sort()
-    .filter((f) => !applied.has(f));
-
-  if (pending.length === 0) {
-    console.log('Database is up to date.');
-    return;
-  }
-
-  for (const name of pending) {
-    const sql = fs.readFileSync(path.join(MIGRATIONS_DIR, name), 'utf8');
-    // Drizzle separates independent statements with this marker.
-    const statements = sql
-      .split('--> statement-breakpoint')
-      .map((s) => s.trim())
-      .filter(Boolean);
-
-    db.exec('BEGIN');
-    try {
-      for (const statement of statements) db.exec(statement);
-      db.prepare('INSERT INTO __migrations (name, applied_at) VALUES (?, ?)').run(name, Date.now());
-      db.exec('COMMIT');
-      console.log(`Applied ${name}`);
-    } catch (error) {
-      db.exec('ROLLBACK');
-      console.error(`Failed to apply ${name}:`, error instanceof Error ? error.message : error);
-      process.exit(1);
-    }
-  }
-
-  console.log(`Done — ${pending.length} migration${pending.length === 1 ? '' : 's'} applied.`);
+const MIGRATIONS = path.resolve(process.cwd(), 'drizzle');
+const url = process.env.DATABASE_URL || 'pglite:./.data/dev';
+if (/^file:/i.test(url)) {
+  console.error('DATABASE_URL still points at a SQLite file. Use a postgres:// URL, or pglite:./.data/dev for local development.');
+  process.exit(1);
 }
 
-main();
+async function main(): Promise<void> {
+  if (/^postgres(ql)?:\/\//i.test(url)) {
+    const pool = new Pool({ connectionString: url, max: 1 });
+    try {
+      await migratePg(drizzlePg(pool), { migrationsFolder: MIGRATIONS });
+    } finally {
+      await pool.end();
+    }
+  } else {
+    const dir = url.replace(/^pglite:/, '');
+    if (dir !== 'memory://') fs.mkdirSync(path.dirname(path.resolve(dir)), { recursive: true });
+    const client = new PGlite(dir === 'memory://' ? undefined : dir);
+    try {
+      await migratePglite(drizzlePglite(client), { migrationsFolder: MIGRATIONS });
+    } finally {
+      await client.close();
+    }
+  }
+  console.log('Database is up to date.');
+}
+
+main().catch((error) => {
+  console.error('Migration failed:', error instanceof Error ? error.message : error);
+  process.exit(1);
+});

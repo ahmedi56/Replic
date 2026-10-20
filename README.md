@@ -103,23 +103,22 @@ src/
 | --- | --- | --- |
 | Framework | Next.js 15 (App Router), React 19 | Server components keep large lists off the client |
 | Language | TypeScript, strict | — |
-| Database | SQLite via Drizzle ORM | Zero-ops for an MVP; Drizzle's SQL is portable to Postgres |
-| Driver | `better-sqlite3` (via Drizzle's `better-sqlite3` driver) | Synchronous, mature, works on every maintained Node release; ships a prebuilt binary, so no compiler is needed |
+| Database | PostgreSQL via Drizzle ORM | Shared by every app instance; the embedded PGlite build gives a zero-install local database |
+| Driver | `pg` in production, `@electric-sql/pglite` in development and tests | Pure JavaScript and WebAssembly: nothing native to compile or rebuild when Node changes |
+| Documents | Local disk, or any S3-compatible bucket (`S3_BUCKET`) | A bucket lets several instances serve the same files |
 | Styling | Tailwind + CSS custom properties | Tokens drive light/dark from one place |
 | Auth | bcryptjs + hashed session cookies | No dependency on an external identity provider |
 | CSV | PapaParse | Correct RFC 4180 quoting |
 | Validation | Zod | One schema per endpoint |
 | Tests | Vitest | — |
 
-**Requires Node 20.19+ or 22.12+.** Tested on Node 22.12 (Windows 10).
+**Requires Node 20.19+ or 22.12+.** Tested on Node 22.12 and 24.20 (Windows 10).
 
-> **On the data layer.** The schema was first written for Prisma, whose query engine is a
-> binary fetched from `binaries.prisma.sh` at install time. It then moved to Node's built-in
-> `node:sqlite`, but that module is only available without a flag from **Node 22.13** (it was
-> added in 22.5 behind `--experimental-sqlite`, and is still experimental), so on Node 22.5 –
-> 22.12 every database import failed with `ERR_UNKNOWN_BUILTIN_MODULE`. It now uses
-> `better-sqlite3`, which supports every maintained Node release. The schema and its intent are
-> unchanged; only `src/db/index.ts` and `scripts/migrate.ts` know which driver is in use.
+> **On the data layer.** The project has used Prisma, then Node's built-in `node:sqlite` (which
+> needs Node 22.13+), then `better-sqlite3` (a native addon that breaks when Node is upgraded).
+> It now runs on PostgreSQL: the same server in production that several instances can share,
+> and an embedded copy of it (PGlite) for local development and tests. Only `src/db/index.ts`,
+> `src/db/schema.ts` and `scripts/migrate.ts` know which one is in use.
 
 ---
 
@@ -255,9 +254,10 @@ nothing about a document leaves the server.
 ## 7. Environment variables
 
 ```bash
-DATABASE_URL="file:./dev.db"          # required
+DATABASE_URL="postgres://user:pass@host:5432/reclip"   # required in production; dev default: pglite:./.data/dev
 SESSION_SECRET="<32+ random chars>"   # required in production
-STORAGE_DIR="./storage"               # where originals live; outside the web root
+STORAGE_DIR="./storage"               # local document storage, used when S3_BUCKET is not set
+# S3_BUCKET, S3_REGION, S3_ENDPOINT, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY   # S3-compatible storage
 MAX_UPLOAD_BYTES=15728640             # optional, default 15MB
 TRUSTED_PROXY_HOPS=1                  # reverse proxies in front of the app (default 1 in production)
 APP_URL="https://your-domain.com"     # base URL for links in emails
@@ -278,9 +278,9 @@ application end to end.**
 ## 8. How to run locally
 
 ```bash
-npm install           # downloads a prebuilt better-sqlite3 binary; no compiler needed
+npm install           # pure JavaScript; nothing to compile
 cp .env.example .env
-npm run db:push       # apply migrations (drizzle/*.sql)
+npm run db:push       # create/upgrade the database (embedded Postgres in ./.data by default)
 npm run dev           # http://localhost:3000
 ```
 
@@ -310,11 +310,14 @@ npm start              # serves on :3000
 Before deploying:
 
 1. Set `SESSION_SECRET` to a long random value.
-2. Point `STORAGE_DIR` at a persistent volume (or swap `src/lib/storage.ts` for S3 — the
-   interface is three functions).
-3. Serve over HTTPS; session cookies become `Secure` automatically in production.
-4. For more than one instance, move the rate limiter in `src/lib/api.ts` to a shared store
-   and move SQLite to Postgres (change the Drizzle dialect; the queries are portable).
+2. Set `DATABASE_URL` to your PostgreSQL server and run `npm run db:push` against it (append
+   `?sslmode=require` for managed providers). The embedded development database is refused in
+   production.
+3. Set `S3_BUCKET` (and its credentials) to store documents in an S3-compatible bucket. Without
+   it documents stay on this server's disk, which limits you to one instance.
+4. Serve over HTTPS; session cookies become `Secure` automatically in production. Set
+   `TRUSTED_PROXY_HOPS` to the number of proxies in front of the app.
+5. More than one instance is supported: rate limits, sessions and data all live in Postgres.
 
 ---
 
@@ -334,7 +337,8 @@ Before deploying:
    receipts cannot.
 4. **Excel export is CSV with a BOM,** which Excel opens correctly. A true `.xlsx` writer is
    not implemented.
-5. **Rate limiting is per-process,** so it is only correct on a single instance.
+5. **Rate limiting costs one database write per limited request.** Fine at this scale; a Redis
+   counter would be cheaper at very high request volumes.
 6. **Password reset returns the link in the response in development.** No mail provider is
    wired; the send site is marked in `src/app/api/auth/reset/route.ts`.
 7. **Single organization per user.** The schema supports many-to-many via `memberships`, but
@@ -345,10 +349,9 @@ Before deploying:
    never auto-matched, but no FX rate is applied.
 10. **`matchReceipts` re-reads candidate transactions per run.** Fine at MVP volumes;
     it wants an incremental index well before a million rows.
-11. **`better-sqlite3` is a native addon.** `npm install` fetches a prebuilt binary for your
-    platform and Node version. On a network that blocks GitHub release downloads, or a platform
-    with no prebuilt binary, it falls back to compiling from source, which needs a C++
-    toolchain (on Windows, Visual Studio Build Tools).
+11. **Money is stored as double-precision numbers,** as it always was. Amounts are compared in
+    minor units with a tolerance, so matching is unaffected, but an accounting-grade ledger
+    would use `numeric`.
 12. **`npm audit` reports advisories in dev-only tooling** (`vitest`, `drizzle-kit`'s bundled
     `@esbuild-kit`) and in the PostCSS copy bundled inside Next.js. None is reachable from the
     running application; the automatic fixes are major-version upgrades (Next 16, Vitest 5) and

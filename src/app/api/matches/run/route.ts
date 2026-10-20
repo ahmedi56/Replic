@@ -6,7 +6,7 @@ export const maxDuration = 60;
 
 /** Re-run matching across the whole organization. */
 export const POST = withAuth(async (auth) => {
-  rateLimit(`rematch:${auth.organizationId}`, 6, 60_000);
+  await rateLimit(`rematch:${auth.organizationId}`, 6, 60_000);
   const result = await matchReceipts(auth);
   return NextResponse.json(result.stats);
 });

@@ -3,7 +3,7 @@ import { and, eq, inArray, desc, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { receipts, receiptExtractions, categories, merchants } from '@/db/schema';
 import { newId } from '../ids';
-import { putDocument, type ValidatedUpload } from '../storage';
+import { putDocument, deleteDocument, type ValidatedUpload } from '../storage';
 import { extractReceipt } from '../ai/registry';
 import { normalizeMerchant } from '../matching/normalize';
 import { findDuplicate, type DuplicateCandidateInput } from '../matching/duplicates';
@@ -287,7 +287,7 @@ export async function listReceipts(organizationId: string, filters: ReceiptFilte
   const rows = await base.orderBy(order).limit(pageSize).offset((page - 1) * pageSize);
 
   const countRows = await db
-    .select({ count: sql<number>`count(*)` })
+    .select({ count: sql<number>`count(*)::int` })
     .from(receipts)
     .leftJoin(receiptExtractions, eq(receiptExtractions.receiptId, receipts.id))
     .where(and(...conditions));
@@ -315,13 +315,23 @@ export async function getReceipt(organizationId: string, receiptId: string) {
 export async function deleteReceipts(auth: AuthContext, ids: string[]): Promise<number> {
   if (!ids.length) return 0;
   const owned = await db
-    .select({ id: receipts.id })
+    .select({ id: receipts.id, storageKey: receipts.storageKey })
     .from(receipts)
     .where(and(eq(receipts.organizationId, auth.organizationId), inArray(receipts.id, ids)));
   const ownedIds = owned.map((r) => r.id);
   if (!ownedIds.length) return 0;
 
   await db.delete(receipts).where(and(eq(receipts.organizationId, auth.organizationId), inArray(receipts.id, ownedIds)));
+
+  // The row is gone, so the file must go too: deletion is promised to be permanent. A failure
+  // here is logged rather than thrown, since the user-visible deletion has already happened.
+  for (const { storageKey } of owned) {
+    try {
+      await deleteDocument(auth.organizationId, storageKey);
+    } catch (error) {
+      console.error('[storage] could not delete a document after its receipt was deleted:', error instanceof Error ? error.message : 'unknown');
+    }
+  }
   for (const id of ownedIds) {
     await recordAudit({
       organizationId: auth.organizationId,

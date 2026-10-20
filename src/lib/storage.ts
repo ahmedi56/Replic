@@ -1,6 +1,15 @@
 import 'server-only';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import {
+  S3Client,
+  PutObjectCommand,
+  GetObjectCommand,
+  DeleteObjectCommand,
+  DeleteObjectsCommand,
+  ListObjectsV2Command,
+  type ServerSideEncryption,
+} from '@aws-sdk/client-s3';
 import { newId, sha256 } from './ids';
 import { ApiError } from './api';
 
@@ -12,8 +21,8 @@ import { ApiError } from './api';
  * are opaque and namespaced by organization, and paths are re-validated on read so a
  * crafted key cannot escape the storage directory.
  *
- * The interface is deliberately small (put/get/delete) so S3 or similar can replace the
- * filesystem without touching callers.
+ * The interface is deliberately small (put/get/delete), so the filesystem and S3 are
+ * interchangeable without touching callers. Choose with S3_BUCKET (see .env.example).
  */
 
 const ROOT = path.resolve(process.env.STORAGE_DIR ?? './storage');
@@ -88,35 +97,143 @@ const EXTENSIONS: Record<string, string> = {
   'application/pdf': 'pdf',
 };
 
+/**
+ * Where bytes actually live. Two implementations behind one small interface:
+ * the local filesystem (development, or a single server with a persistent disk) and any
+ * S3-compatible bucket (AWS S3, Cloudflare R2, Backblaze B2, MinIO), which is what lets more
+ * than one app instance serve the same documents.
+ */
+export interface StorageBackend {
+  put(key: string, bytes: Buffer, mimeType: string): Promise<void>;
+  get(key: string): Promise<Buffer>;
+  remove(key: string): Promise<void>;
+  removePrefix(prefix: string): Promise<void>;
+}
+
+export function createLocalBackend(root: string): StorageBackend {
+  const base = path.resolve(root);
+  // Resolve a key to an absolute path, refusing anything outside the root.
+  function resolveKey(key: string): string {
+    const target = path.resolve(base, key);
+    const rootWithSep = base.endsWith(path.sep) ? base : base + path.sep;
+    if (!target.startsWith(rootWithSep)) throw new ApiError(400, 'Invalid storage key');
+    return target;
+  }
+  return {
+    async put(key, bytes) {
+      const target = resolveKey(key);
+      await fs.mkdir(path.dirname(target), { recursive: true });
+      await fs.writeFile(target, bytes, { mode: 0o600 });
+    },
+    async get(key) {
+      return fs.readFile(resolveKey(key));
+    },
+    async remove(key) {
+      await fs.rm(resolveKey(key), { force: true });
+    },
+    async removePrefix(prefix) {
+      await fs.rm(resolveKey(prefix), { recursive: true, force: true });
+    },
+  };
+}
+
+export function createS3Backend(
+  client: Pick<S3Client, 'send'>,
+  options: { bucket: string; serverSideEncryption?: ServerSideEncryption },
+): StorageBackend {
+  const { bucket } = options;
+  return {
+    async put(key, bytes, mimeType) {
+      await client.send(
+        new PutObjectCommand({
+          Bucket: bucket,
+          Key: key,
+          Body: bytes,
+          ContentType: mimeType,
+          ...(options.serverSideEncryption ? { ServerSideEncryption: options.serverSideEncryption } : {}),
+        }),
+      );
+    },
+    async get(key) {
+      const result = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+      if (!result.Body) throw new ApiError(404, 'Document not found');
+      return Buffer.from(await result.Body.transformToByteArray());
+    },
+    async remove(key) {
+      await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
+    },
+    async removePrefix(prefix) {
+      let token: string | undefined;
+      do {
+        const page = await client.send(new ListObjectsV2Command({ Bucket: bucket, Prefix: prefix, ContinuationToken: token }));
+        const keys = (page.Contents ?? []).flatMap((o) => (o.Key ? [{ Key: o.Key }] : []));
+        if (keys.length) {
+          const result = await client.send(new DeleteObjectsCommand({ Bucket: bucket, Delete: { Objects: keys, Quiet: true } }));
+          // A partial failure must not be reported as a completed deletion.
+          if (result.Errors?.length) throw new Error(`Could not delete ${result.Errors.length} stored documents`);
+        }
+        token = page.IsTruncated ? page.NextContinuationToken : undefined;
+      } while (token);
+    },
+  };
+}
+
+let backend: StorageBackend | null = null;
+
+function getBackend(): StorageBackend {
+  if (backend) return backend;
+  const bucket = process.env.S3_BUCKET;
+  if (bucket) {
+    const accessKeyId = process.env.S3_ACCESS_KEY_ID;
+    const secretAccessKey = process.env.S3_SECRET_ACCESS_KEY;
+    backend = createS3Backend(
+      new S3Client({
+        region: process.env.S3_REGION || 'auto',
+        // Needed for R2, B2, MinIO and other S3-compatible services; omit for AWS itself.
+        endpoint: process.env.S3_ENDPOINT || undefined,
+        forcePathStyle: process.env.S3_FORCE_PATH_STYLE === 'true',
+        // Without explicit keys the SDK falls back to its normal chain (IAM role, env, profile).
+        credentials: accessKeyId && secretAccessKey ? { accessKeyId, secretAccessKey } : undefined,
+      }),
+      { bucket, serverSideEncryption: (process.env.S3_SSE as ServerSideEncryption | undefined) || undefined },
+    );
+  } else {
+    if (process.env.NODE_ENV === 'production') {
+      console.warn('[storage] S3_BUCKET is not set: documents are stored on local disk, which limits you to one instance.');
+    }
+    backend = createLocalBackend(ROOT);
+  }
+  return backend;
+}
+
+/** Replace the storage backend (tests only). */
+export function setStorageBackend(next: StorageBackend | null): void {
+  backend = next;
+}
+
+function assertOwnKey(organizationId: string, key: string): void {
+  // Ownership is encoded in the key and re-checked here, on top of the caller's own check.
+  if (!key.startsWith(`${organizationId}/`) || key.includes('..')) throw new ApiError(403, 'Not allowed');
+}
+
 export async function putDocument(organizationId: string, file: ValidatedUpload): Promise<string> {
   const key = `${organizationId}/${newId()}.${EXTENSIONS[file.mimeType] ?? 'bin'}`;
-  const target = resolveKey(key);
-  await fs.mkdir(path.dirname(target), { recursive: true });
-  await fs.writeFile(target, file.bytes, { mode: 0o600 });
+  await getBackend().put(key, file.bytes, file.mimeType);
   return key;
 }
 
 export async function getDocument(organizationId: string, key: string): Promise<Buffer> {
-  // Ownership is encoded in the key and re-checked here, on top of the caller's own check.
-  if (!key.startsWith(`${organizationId}/`)) throw new ApiError(403, 'Not allowed');
-  return fs.readFile(resolveKey(key));
+  assertOwnKey(organizationId, key);
+  return getBackend().get(key);
 }
 
 export async function deleteDocument(organizationId: string, key: string): Promise<void> {
-  if (!key.startsWith(`${organizationId}/`)) throw new ApiError(403, 'Not allowed');
-  await fs.rm(resolveKey(key), { force: true });
+  assertOwnKey(organizationId, key);
+  await getBackend().remove(key);
 }
 
 /** Remove every stored document for an organization (used when an account is deleted). */
 export async function deleteOrganizationDocuments(organizationId: string): Promise<void> {
   if (!/^[\w-]+$/.test(organizationId)) throw new ApiError(400, 'Invalid organization id');
-  await fs.rm(resolveKey(organizationId), { recursive: true, force: true });
-}
-
-/** Resolve a storage key to an absolute path, refusing anything outside the root. */
-function resolveKey(key: string): string {
-  const target = path.resolve(ROOT, key);
-  const rootWithSep = ROOT.endsWith(path.sep) ? ROOT : ROOT + path.sep;
-  if (!target.startsWith(rootWithSep)) throw new ApiError(400, 'Invalid storage key');
-  return target;
+  await getBackend().removePrefix(`${organizationId}/`);
 }

@@ -8,7 +8,7 @@ const MAX_CSV_BYTES = 10 * 1024 * 1024;
 
 /** Parse a CSV and return headers, samples and a suggested mapping. Writes nothing. */
 export const POST = withAuth(async (_auth, req) => {
-  rateLimit(clientKey(req, 'csv-preview'), 30, 60_000);
+  await rateLimit(clientKey(req, 'csv-preview'), 30, 60_000);
 
   const form = await req.formData().catch(() => {
     throw new ApiError(400, 'Upload the file as multipart form data');

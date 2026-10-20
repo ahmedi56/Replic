@@ -18,12 +18,14 @@
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1154.0",
+    "@electric-sql/pglite": "^0.5.10",
     "bcryptjs": "^3.0.2",
-    "better-sqlite3": "^12.11.1",
     "drizzle-orm": "^0.45.3",
     "next": "^15.5.26",
     "nodemailer": "^10.0.15",
     "papaparse": "^5.5.3",
+    "pg": "^8.23.1",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "server-only": "^0.0.1",
@@ -31,10 +33,10 @@
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
-    "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^24.6.0",
     "@types/nodemailer": "^8.0.2",
     "@types/papaparse": "^5.3.16",
+    "@types/pg": "^8.23.1",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "autoprefixer": "^10.4.21",

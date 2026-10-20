@@ -28,8 +28,8 @@ export const POST = withoutAuth(async (req) => {
   const email = body.email.toLowerCase().trim();
 
   // Limited per-IP and per-account, so one account can't be brute-forced from many IPs.
-  rateLimit(clientKey(req, 'login'), 10, 60_000);
-  rateLimit(`login-account:${email}`, 10, 60_000);
+  await rateLimit(clientKey(req, 'login'), 10, 60_000);
+  await rateLimit(`login-account:${email}`, 10, 60_000);
 
   const rows = await db.select().from(users).where(eq(users.email, email)).limit(1);
   const user = rows[0];

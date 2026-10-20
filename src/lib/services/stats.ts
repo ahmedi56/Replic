@@ -22,32 +22,32 @@ export async function getDashboardStats(organizationId: string): Promise<Dashboa
 
   const receiptCount = await scalar(
     db
-      .select({ count: sql<number>`count(*)` })
+      .select({ count: sql<number>`count(*)::int` })
       .from(receipts)
       .where(and(eq(receipts.organizationId, organizationId), eq(receipts.isDuplicate, false))),
   );
 
   const duplicates = await scalar(
     db
-      .select({ count: sql<number>`count(*)` })
+      .select({ count: sql<number>`count(*)::int` })
       .from(receipts)
       .where(and(eq(receipts.organizationId, organizationId), eq(receipts.isDuplicate, true))),
   );
 
   const transactionCount = await scalar(
-    db.select({ count: sql<number>`count(*)` }).from(transactions).where(eq(transactions.organizationId, organizationId)),
+    db.select({ count: sql<number>`count(*)::int` }).from(transactions).where(eq(transactions.organizationId, organizationId)),
   );
 
   const matched = await scalar(
     db
-      .select({ count: sql<number>`count(*)` })
+      .select({ count: sql<number>`count(*)::int` })
       .from(matches)
       .where(and(eq(matches.organizationId, organizationId), inArray(matches.status, ['confirmed', 'auto']))),
   );
 
   const needsReview = await scalar(
     db
-      .select({ count: sql<number>`count(*)` })
+      .select({ count: sql<number>`count(*)::int` })
       .from(matches)
       .where(and(eq(matches.organizationId, organizationId), eq(matches.status, 'suggested'))),
   );
@@ -64,7 +64,7 @@ export async function getDashboardStats(organizationId: string): Promise<Dashboa
 
   const unmatchedReceipts = await scalar(
     db
-      .select({ count: sql<number>`count(*)` })
+      .select({ count: sql<number>`count(*)::int` })
       .from(receipts)
       .where(
         and(
@@ -77,7 +77,7 @@ export async function getDashboardStats(organizationId: string): Promise<Dashboa
 
   const unmatchedTransactions = await scalar(
     db
-      .select({ count: sql<number>`count(*)` })
+      .select({ count: sql<number>`count(*)::int` })
       .from(transactions)
       .where(and(eq(transactions.organizationId, organizationId), sql`${transactions.id} not in ${liveTransactionIds}`)),
   );
@@ -143,7 +143,7 @@ export async function getCategoryBreakdown(organizationId: string) {
       name: sql<string>`coalesce(${categories.name}, 'Uncategorised')`,
       color: sql<string>`coalesce(${categories.color}, '#94A3B8')`,
       total: sql<number>`coalesce(sum(${receiptExtractions.total}), 0)`,
-      count: sql<number>`count(*)`,
+      count: sql<number>`count(*)::int`,
     })
     .from(receipts)
     .leftJoin(receiptExtractions, eq(receiptExtractions.receiptId, receipts.id))

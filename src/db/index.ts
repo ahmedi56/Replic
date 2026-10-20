@@ -1,32 +1,93 @@
 import 'server-only';
-import Database from 'better-sqlite3';
-import { drizzle } from 'drizzle-orm/better-sqlite3';
+import fs from 'node:fs';
+import path from 'node:path';
+import { Pool } from 'pg';
+import { PGlite } from '@electric-sql/pglite';
+import { drizzle as drizzlePg, type NodePgDatabase } from 'drizzle-orm/node-postgres';
+import { drizzle as drizzlePglite } from 'drizzle-orm/pglite';
 import * as schema from './schema';
 
 /**
- * Database client.
+ * Database client: PostgreSQL.
  *
- * Built on `better-sqlite3` through Drizzle's own driver. Node's built-in `node:sqlite` was
- * used previously, but it only loads without a flag from Node 22.13 (it was added in 22.5
- * behind `--experimental-sqlite`), so it fails outright on 22.5 – 22.12 with
- * `ERR_UNKNOWN_BUILTIN_MODULE`. `better-sqlite3` supports every maintained Node release, and
- * ships as a prebuilt binary, so `npm install` does not need a compiler.
- *
- * Moving to Postgres later means swapping this file and the Drizzle dialect; the queries in
- * `lib/services/*` are ordinary Drizzle and carry over unchanged.
+ *  - `DATABASE_URL=postgres://user:pass@host:5432/db` connects to any PostgreSQL server
+ *    (Railway, Neon, Supabase, RDS, a local install). This is what production uses, and what
+ *    lets more than one app instance share the same data.
+ *  - `DATABASE_URL=pglite:./.data/dev` (the development default) runs PostgreSQL embedded in
+ *    the Node process, stored in that folder. It needs no install and speaks the same SQL, so
+ *    code written against it behaves the same on a real server. One process only, so it is
+ *    refused in production.
  */
 
-const globalForDb = globalThis as unknown as { __reclipDb?: ReturnType<typeof create> };
+const DEFAULT_URL = 'pglite:./.data/dev';
 
-function create() {
-  const file = (process.env.DATABASE_URL ?? 'file:./dev.db').replace(/^file:/, '');
-  const sqlite = new Database(file);
-  sqlite.pragma('journal_mode = WAL');
-  sqlite.pragma('foreign_keys = ON');
-  return drizzle(sqlite, { schema });
+export function databaseUrl(): string {
+  const url = process.env.DATABASE_URL || DEFAULT_URL;
+  if (/^file:/i.test(url)) {
+    throw new Error(
+      'DATABASE_URL still points at a SQLite file. Reclip now uses PostgreSQL: set it to a postgres:// URL, or to pglite:./.data/dev for local development.',
+    );
+  }
+  return url;
 }
 
-export const db = globalForDb.__reclipDb ?? create();
-if (process.env.NODE_ENV !== 'production') globalForDb.__reclipDb = db;
+export function isPostgresUrl(url: string): boolean {
+  return /^postgres(ql)?:\/\//i.test(url);
+}
+
+/** Typed as the node-postgres flavour; the PGlite flavour exposes the identical query API. */
+export type Database = NodePgDatabase<typeof schema>;
+
+interface Connection {
+  db: Database;
+  close: () => Promise<void>;
+}
+
+const globalForDb = globalThis as unknown as { __reclipDb?: Connection };
+
+function connect(): Connection {
+  const url = databaseUrl();
+
+  if (isPostgresUrl(url)) {
+    const pool = new Pool({
+      connectionString: url,
+      max: Number(process.env.DATABASE_POOL_MAX ?? 10),
+      idleTimeoutMillis: 30_000,
+    });
+    // An idle client dropping must not crash the process; the pool replaces it.
+    pool.on('error', (error) => console.error('[db] idle client error:', error.message));
+    return { db: drizzlePg(pool, { schema }), close: () => pool.end() };
+  }
+
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('DATABASE_URL must be a postgres:// URL in production (the embedded PGlite database is for development only).');
+  }
+  const dir = url.replace(/^pglite:/, '');
+  // PGlite creates its own folder but not the folders above it (a fresh clone has no ./.data).
+  if (dir !== 'memory://') fs.mkdirSync(path.dirname(path.resolve(dir)), { recursive: true });
+  const client = new PGlite(dir === 'memory://' ? undefined : dir);
+  return { db: drizzlePglite(client, { schema }) as unknown as Database, close: () => client.close() };
+}
+
+function connection(): Connection {
+  // Reused across hot reloads in development, so each edit does not open another pool.
+  globalForDb.__reclipDb ??= connect();
+  return globalForDb.__reclipDb;
+}
+
+export const db: Database = new Proxy({} as Database, {
+  get(_target, property) {
+    const target = connection().db as unknown as Record<string | symbol, unknown>;
+    const value = target[property];
+    return typeof value === 'function' ? value.bind(target) : value;
+  },
+});
+
+/** Close the connection (tests, shutdown). */
+export async function closeDb(): Promise<void> {
+  const current = globalForDb.__reclipDb;
+  globalForDb.__reclipDb = undefined;
+  await current?.close();
+}
 
 export { schema };

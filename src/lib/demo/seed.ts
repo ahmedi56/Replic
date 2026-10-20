@@ -3,7 +3,7 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { receipts, transactions, matches, imports, bankAccounts, merchants, auditLogs } from '@/db/schema';
 import { makeReceiptPdf } from './pdf';
-import { validateUpload } from '../storage';
+import { validateUpload, deleteOrganizationDocuments } from '../storage';
 import { ingestReceipt } from '../services/receipts';
 import { commitImport } from '../services/imports';
 import { matchReceipts } from '../services/matching';
@@ -180,7 +180,7 @@ export async function loadDemoData(auth: AuthContext): Promise<{ receipts: numbe
   await matchReceipts(auth);
   // Report what actually settled, not what this last (usually no-op) sweep changed.
   const settled = await db
-    .select({ count: sql<number>`count(*)` })
+    .select({ count: sql<number>`count(*)::int` })
     .from(matches)
     .where(and(eq(matches.organizationId, auth.organizationId), inArray(matches.status, ['auto', 'confirmed'])));
 
@@ -207,4 +207,10 @@ export async function clearDemoData(auth: AuthContext): Promise<void> {
   await db.delete(bankAccounts).where(eq(bankAccounts.organizationId, org));
   await db.delete(merchants).where(eq(merchants.organizationId, org));
   await db.delete(auditLogs).where(eq(auditLogs.organizationId, org));
+  // The receipt rows are gone; remove their files as well.
+  try {
+    await deleteOrganizationDocuments(org);
+  } catch (error) {
+    console.error('[storage] could not delete stored documents:', error instanceof Error ? error.message : 'unknown');
+  }
 }

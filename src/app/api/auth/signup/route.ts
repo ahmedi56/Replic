@@ -18,7 +18,7 @@ const schema = z.object({
 });
 
 export const POST = withoutAuth(async (req) => {
-  rateLimit(clientKey(req, 'signup'), 5, 60_000);
+  await rateLimit(clientKey(req, 'signup'), 5, 60_000);
   const body = schema.parse(await req.json());
   const email = body.email.toLowerCase().trim();
 

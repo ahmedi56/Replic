@@ -1,39 +1,40 @@
 /**
- * Reclip data model (Drizzle / SQLite).
+ * Reclip data model (Drizzle / PostgreSQL).
  *
  * Two rules shape this schema:
  *  1. The original uploaded document is never mutated. `receipts` holds the file;
  *     `receiptExtractions` holds everything we derived from it.
  *  2. Every tenant-owned row carries `organizationId`. All queries scope by it.
  */
-import { sql } from 'drizzle-orm';
-import { sqliteTable, text, integer, real, index, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { pgTable, text, integer, boolean, doublePrecision, timestamp, index, uniqueIndex } from 'drizzle-orm/pg-core';
 
 const id = () => text('id').primaryKey();
-const now = () => integer('created_at', { mode: 'timestamp_ms' }).notNull().default(sql`(unixepoch() * 1000)`);
+/** A point in time. Stored as timestamptz, handled as a JS Date everywhere in the app. */
+const ts = (name: string) => timestamp(name, { withTimezone: true, mode: 'date' });
+const now = () => ts('created_at').notNull().defaultNow();
 
-export const organizations = sqliteTable('organizations', {
+export const organizations = pgTable('organizations', {
   id: id(),
   name: text('name').notNull(),
   createdAt: now(),
 });
 
-export const users = sqliteTable('users', {
+export const users = pgTable('users', {
   id: id(),
   email: text('email').notNull().unique(),
   passwordHash: text('password_hash').notNull(),
   name: text('name'),
   persona: text('persona'), // freelancer | small_business | accountant | other
-  onboardedAt: integer('onboarded_at', { mode: 'timestamp_ms' }),
+  onboardedAt: ts('onboarded_at'),
   /** Null until the address is proven (email link or password reset). */
-  emailVerifiedAt: integer('email_verified_at', { mode: 'timestamp_ms' }),
+  emailVerifiedAt: ts('email_verified_at'),
   /** Consecutive wrong passwords; reset on success or when the lock starts. */
   failedLogins: integer('failed_logins').notNull().default(0),
-  lockedUntil: integer('locked_until', { mode: 'timestamp_ms' }),
+  lockedUntil: ts('locked_until'),
   createdAt: now(),
 });
 
-export const memberships = sqliteTable(
+export const memberships = pgTable(
   'memberships',
   {
     id: id(),
@@ -44,36 +45,36 @@ export const memberships = sqliteTable(
   (t) => [uniqueIndex('memberships_user_org').on(t.userId, t.organizationId), index('memberships_org').on(t.organizationId)],
 );
 
-export const sessions = sqliteTable(
+export const sessions = pgTable(
   'sessions',
   {
     id: id(),
     tokenHash: text('token_hash').notNull().unique(),
     userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-    expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
+    expiresAt: ts('expires_at').notNull(),
     createdAt: now(),
   },
   (t) => [index('sessions_user').on(t.userId)],
 );
 
-export const passwordResetTokens = sqliteTable('password_reset_tokens', {
+export const passwordResetTokens = pgTable('password_reset_tokens', {
   id: id(),
   tokenHash: text('token_hash').notNull().unique(),
   userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
-  usedAt: integer('used_at', { mode: 'timestamp_ms' }),
+  expiresAt: ts('expires_at').notNull(),
+  usedAt: ts('used_at'),
 });
 
-export const emailVerificationTokens = sqliteTable('email_verification_tokens', {
+export const emailVerificationTokens = pgTable('email_verification_tokens', {
   id: id(),
   tokenHash: text('token_hash').notNull().unique(),
   userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
-  usedAt: integer('used_at', { mode: 'timestamp_ms' }),
+  expiresAt: ts('expires_at').notNull(),
+  usedAt: ts('used_at'),
 });
 
 /** Account-level security history (sign-ins, password changes), shown to the user in Settings. */
-export const securityEvents = sqliteTable(
+export const securityEvents = pgTable(
   'security_events',
   {
     id: id(),
@@ -86,14 +87,24 @@ export const securityEvents = sqliteTable(
   (t) => [index('security_events_user').on(t.userId, t.createdAt)],
 );
 
+/**
+ * Fixed-window rate-limit counters, shared by every app instance (an in-memory map would give
+ * each instance its own allowance). One row per key; see `rateLimit` in lib/api.ts.
+ */
+export const rateLimits = pgTable('rate_limits', {
+  key: text('key').primaryKey(),
+  count: integer('count').notNull(),
+  resetAt: ts('reset_at').notNull(),
+});
+
 /** Per-org overrides for matching weights/thresholds (JSON). Defaults in lib/matching/config.ts. */
-export const orgSettings = sqliteTable('org_settings', {
+export const orgSettings = pgTable('org_settings', {
   id: id(),
   organizationId: text('organization_id').notNull().unique().references(() => organizations.id, { onDelete: 'cascade' }),
   matchingConfig: text('matching_config'),
 });
 
-export const subscriptions = sqliteTable('subscriptions', {
+export const subscriptions = pgTable('subscriptions', {
   id: id(),
   organizationId: text('organization_id').notNull().unique().references(() => organizations.id, { onDelete: 'cascade' }),
   plan: text('plan').notNull().default('free'),
@@ -101,19 +112,19 @@ export const subscriptions = sqliteTable('subscriptions', {
   periodStart: now(),
 });
 
-export const categories = sqliteTable(
+export const categories = pgTable(
   'categories',
   {
     id: id(),
     organizationId: text('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
     name: text('name').notNull(),
     color: text('color').notNull().default('#10B981'),
-    isSystem: integer('is_system', { mode: 'boolean' }).notNull().default(false),
+    isSystem: boolean('is_system').notNull().default(false),
   },
   (t) => [uniqueIndex('categories_org_name').on(t.organizationId, t.name)],
 );
 
-export const merchants = sqliteTable(
+export const merchants = pgTable(
   'merchants',
   {
     id: id(),
@@ -127,7 +138,7 @@ export const merchants = sqliteTable(
 );
 
 /** The original uploaded document. */
-export const receipts = sqliteTable(
+export const receipts = pgTable(
   'receipts',
   {
     id: id(),
@@ -140,11 +151,11 @@ export const receipts = sqliteTable(
     checksum: text('checksum').notNull(),
     status: text('status').notNull().default('uploaded'),
     failureCode: text('failure_code'),
-    isDuplicate: integer('is_duplicate', { mode: 'boolean' }).notNull().default(false),
+    isDuplicate: boolean('is_duplicate').notNull().default(false),
     duplicateOfId: text('duplicate_of_id'),
     categoryId: text('category_id').references(() => categories.id, { onDelete: 'set null' }),
     createdAt: now(),
-    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull().default(sql`(unixepoch() * 1000)`),
+    updatedAt: ts('updated_at').notNull().defaultNow(),
   },
   (t) => [
     index('receipts_org_status').on(t.organizationId, t.status),
@@ -154,7 +165,7 @@ export const receipts = sqliteTable(
 );
 
 /** Structured data derived from a receipt — separate row, so the original stays intact. */
-export const receiptExtractions = sqliteTable(
+export const receiptExtractions = pgTable(
   'receipt_extractions',
   {
     id: id(),
@@ -162,26 +173,26 @@ export const receiptExtractions = sqliteTable(
     merchantRaw: text('merchant_raw'),
     merchantNorm: text('merchant_norm'),
     merchantId: text('merchant_id').references(() => merchants.id, { onDelete: 'set null' }),
-    date: integer('date', { mode: 'timestamp_ms' }),
-    total: real('total'),
-    subtotal: real('subtotal'),
-    tax: real('tax'),
+    date: ts('date'),
+    total: doublePrecision('total'),
+    subtotal: doublePrecision('subtotal'),
+    tax: doublePrecision('tax'),
     currency: text('currency'),
     invoiceNumber: text('invoice_number'),
     paymentMethod: text('payment_method'),
     items: text('items'), // JSON array
     /** Per-field confidence 0-1, JSON: { merchant: 0.99, date: 0.97, ... } */
     fieldConfidence: text('field_confidence'),
-    overallConfidence: real('overall_confidence').notNull().default(0),
+    overallConfidence: doublePrecision('overall_confidence').notNull().default(0),
     provider: text('provider').notNull().default('mock'),
     rawResponse: text('raw_response'),
-    editedByUser: integer('edited_by_user', { mode: 'boolean' }).notNull().default(false),
+    editedByUser: boolean('edited_by_user').notNull().default(false),
     createdAt: now(),
   },
   (t) => [index('extractions_merchant_norm').on(t.merchantNorm)],
 );
 
-export const bankAccounts = sqliteTable(
+export const bankAccounts = pgTable(
   'bank_accounts',
   {
     id: id(),
@@ -192,7 +203,7 @@ export const bankAccounts = sqliteTable(
   (t) => [index('bank_accounts_org').on(t.organizationId)],
 );
 
-export const imports = sqliteTable(
+export const imports = pgTable(
   'imports',
   {
     id: id(),
@@ -210,7 +221,7 @@ export const imports = sqliteTable(
   (t) => [index('imports_org_checksum').on(t.organizationId, t.checksum)],
 );
 
-export const transactions = sqliteTable(
+export const transactions = pgTable(
   'transactions',
   {
     id: id(),
@@ -223,8 +234,8 @@ export const transactions = sqliteTable(
     merchantNorm: text('merchant_norm'),
     merchantId: text('merchant_id').references(() => merchants.id, { onDelete: 'set null' }),
     reference: text('reference'),
-    date: integer('date', { mode: 'timestamp_ms' }).notNull(),
-    amount: real('amount').notNull(), // signed; negative = money out
+    date: ts('date').notNull(),
+    amount: doublePrecision('amount').notNull(), // signed; negative = money out
     currency: text('currency').notNull().default('EUR'),
     paymentMethod: text('payment_method'),
     /** sha256(date|amount|description|account) — dedupes re-imported rows. */
@@ -239,21 +250,21 @@ export const transactions = sqliteTable(
   ],
 );
 
-export const matches = sqliteTable(
+export const matches = pgTable(
   'matches',
   {
     id: id(),
     organizationId: text('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
     receiptId: text('receipt_id').notNull().references(() => receipts.id, { onDelete: 'cascade' }),
     transactionId: text('transaction_id').notNull().references(() => transactions.id, { onDelete: 'cascade' }),
-    score: real('score').notNull(),
+    score: doublePrecision('score').notNull(),
     status: text('status').notNull().default('suggested'), // suggested|confirmed|rejected|auto
     /** JSON signal breakdown — this is what the "Why matched?" panel renders. */
     breakdown: text('breakdown').notNull(),
     method: text('method').notNull().default('deterministic'),
     confirmedBy: text('confirmed_by'),
     createdAt: now(),
-    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull().default(sql`(unixepoch() * 1000)`),
+    updatedAt: ts('updated_at').notNull().defaultNow(),
   },
   (t) => [
     uniqueIndex('matches_receipt_txn').on(t.receiptId, t.transactionId),
@@ -262,7 +273,7 @@ export const matches = sqliteTable(
   ],
 );
 
-export const auditLogs = sqliteTable(
+export const auditLogs = pgTable(
   'audit_logs',
   {
     id: id(),

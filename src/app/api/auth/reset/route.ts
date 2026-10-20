@@ -23,7 +23,7 @@ const TTL_MS = 1000 * 60 * 30;
  * development only, so the flow is still demonstrable.
  */
 export const POST = withoutAuth(async (req) => {
-  rateLimit(clientKey(req, 'reset'), 5, 60_000);
+  await rateLimit(clientKey(req, 'reset'), 5, 60_000);
   const { email } = requestSchema.parse(await req.json());
 
   const rows = await db.select({ id: users.id, email: users.email }).from(users).where(eq(users.email, email.toLowerCase().trim())).limit(1);
@@ -59,7 +59,7 @@ export const POST = withoutAuth(async (req) => {
 });
 
 export const PUT = withoutAuth(async (req) => {
-  rateLimit(clientKey(req, 'reset-confirm'), 10, 60_000);
+  await rateLimit(clientKey(req, 'reset-confirm'), 10, 60_000);
   const { token, password } = confirmSchema.parse(await req.json());
 
   const rows = await db

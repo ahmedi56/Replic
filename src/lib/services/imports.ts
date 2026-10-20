@@ -228,7 +228,7 @@ export async function listTransactions(
     .limit(pageSize)
     .offset((page - 1) * pageSize);
 
-  const countRows = await db.select({ count: sql<number>`count(*)` }).from(transactions).where(and(...conditions));
+  const countRows = await db.select({ count: sql<number>`count(*)::int` }).from(transactions).where(and(...conditions));
   return { rows, total: Number(countRows[0]?.count ?? 0), page, pageSize };
 }
 

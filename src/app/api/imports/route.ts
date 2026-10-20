@@ -22,7 +22,7 @@ const schema = z.object({
 export const GET = withAuth(async (auth) => NextResponse.json({ imports: await listImports(auth.organizationId) }));
 
 export const POST = withAuth(async (auth, req) => {
-  rateLimit(`import:${auth.organizationId}`, 20, 60_000);
+  await rateLimit(`import:${auth.organizationId}`, 20, 60_000);
   const body = schema.parse(await req.json());
 
   const result = await commitImport(auth, body);

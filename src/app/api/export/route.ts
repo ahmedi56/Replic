@@ -6,7 +6,7 @@ export const runtime = 'nodejs';
 const SCOPES: ExportScope[] = ['all', 'matched', 'review', 'unmatched'];
 
 export const GET = withAuth(async (auth, req) => {
-  rateLimit(`export:${auth.organizationId}`, 20, 60_000);
+  await rateLimit(`export:${auth.organizationId}`, 20, 60_000);
 
   const requested = new URL(req.url).searchParams.get('scope') as ExportScope | null;
   const scope: ExportScope = requested && SCOPES.includes(requested) ? requested : 'all';

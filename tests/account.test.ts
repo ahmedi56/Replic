@@ -12,10 +12,10 @@ import type { AuthContext } from '@/lib/auth/session';
  */
 
 const workdir = fs.mkdtempSync(path.join(os.tmpdir(), 'reclip-account-'));
-const dbFile = path.join(workdir, 'test.db');
+const dbDir = path.join(workdir, 'pg');
 const storageDir = path.join(workdir, 'storage');
 
-process.env.DATABASE_URL = `file:${dbFile}`;
+process.env.DATABASE_URL = `pglite:${dbDir}`;
 process.env.STORAGE_DIR = storageDir;
 process.env.EXTRACTION_PROVIDER = 'local';
 process.env.SEMANTIC_PROVIDER = 'local';
@@ -61,7 +61,7 @@ beforeAll(async () => {
   fs.mkdirSync(storageDir, { recursive: true });
   execFileSync('node', ['node_modules/tsx/dist/cli.mjs', 'scripts/migrate.ts'], {
     cwd: process.cwd(),
-    env: { ...process.env, DATABASE_URL: `file:${dbFile}` },
+    env: { ...process.env, DATABASE_URL: `pglite:${dbDir}` },
     stdio: 'pipe',
   });
   db = (await import('@/db')).db;
@@ -74,8 +74,8 @@ beforeAll(async () => {
   ids = await import('@/lib/ids');
 });
 
-afterAll(() => {
-  db.$client.close();
+afterAll(async () => {
+  await (await import('@/db')).closeDb();
   fs.rmSync(workdir, { recursive: true, force: true });
 });
 
@@ -210,5 +210,62 @@ describe('email verification', () => {
     // getAuth reads cookies(), which only exists inside a request, so assert the rule directly.
     const mail = await import('@/lib/mail');
     expect(mail.isMailConfigured()).toBe(false);
+  });
+});
+
+describe('rate limiting (shared through the database)', () => {
+  it('lets calls through up to the limit, then refuses with 429', async () => {
+    const api = await import('@/lib/api');
+    const key = `test:${ids.newId()}`;
+    for (let i = 0; i < 3; i++) await api.rateLimit(key, 3, 60_000);
+    await expect(api.rateLimit(key, 3, 60_000)).rejects.toMatchObject({ status: 429 });
+  });
+
+  it('counts each key separately', async () => {
+    const api = await import('@/lib/api');
+    const a = `test:${ids.newId()}`;
+    const b = `test:${ids.newId()}`;
+    for (let i = 0; i < 2; i++) await api.rateLimit(a, 2, 60_000);
+    await expect(api.rateLimit(a, 2, 60_000)).rejects.toMatchObject({ status: 429 });
+    await expect(api.rateLimit(b, 2, 60_000)).resolves.toBeUndefined();
+  });
+
+  it('starts a fresh window once the old one has expired', async () => {
+    const api = await import('@/lib/api');
+    const key = `test:${ids.newId()}`;
+    await api.rateLimit(key, 1, 150);
+    await expect(api.rateLimit(key, 1, 150)).rejects.toMatchObject({ status: 429 });
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    await expect(api.rateLimit(key, 1, 150)).resolves.toBeUndefined();
+  });
+
+  it('is atomic: parallel calls past the limit are all counted', async () => {
+    const api = await import('@/lib/api');
+    const key = `test:${ids.newId()}`;
+    const results = await Promise.allSettled(Array.from({ length: 10 }, () => api.rateLimit(key, 4, 60_000)));
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(4);
+    expect(results.filter((r) => r.status === 'rejected')).toHaveLength(6);
+  });
+});
+
+describe('deleting a receipt removes its stored file', () => {
+  it('deletes the row and the document, and only that document', async () => {
+    const ctx = await makeUser('filedel', 'passphrase-1234');
+    const receipts = await import('@/lib/services/receipts');
+    const pdfLib = await import('@/lib/demo/pdf');
+
+    const make = (name: string, total: string) =>
+      storage.validateUpload(pdfLib.makeReceiptPdf([name, 'Date: 2026-09-28', `Total: EUR ${total}`]), `${name}.pdf`, 'application/pdf');
+    const one = await receipts.ingestReceipt(ctx, make('Alpha Cafe', '10.00'));
+    const two = await receipts.ingestReceipt(ctx, make('Beta Shop', '20.00'));
+
+    const rows = await db.select().from(schema.receipts).where(eq(schema.receipts.organizationId, ctx.organizationId));
+    const keyOf = (id: string) => rows.find((r) => r.id === id)!.storageKey;
+    expect(fs.existsSync(path.join(storageDir, keyOf(one.receiptId)))).toBe(true);
+
+    expect(await receipts.deleteReceipts(ctx, [one.receiptId])).toBe(1);
+
+    expect(fs.existsSync(path.join(storageDir, keyOf(one.receiptId)))).toBe(false);
+    expect(fs.existsSync(path.join(storageDir, keyOf(two.receiptId)))).toBe(true);
   });
 });

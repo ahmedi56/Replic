@@ -263,7 +263,7 @@ export async function listMatches(
     .offset((page - 1) * pageSize);
 
   const countRows = await db
-    .select({ count: sql<number>`count(*)` })
+    .select({ count: sql<number>`count(*)::int` })
     .from(matches)
     .innerJoin(receipts, eq(receipts.id, matches.receiptId))
     .leftJoin(receiptExtractions, eq(receiptExtractions.receiptId, receipts.id))
@@ -491,7 +491,7 @@ export async function listUnmatchedTransactions(organizationId: string, opts: { 
     .limit(pageSize)
     .offset((page - 1) * pageSize);
 
-  const countRows = await db.select({ count: sql<number>`count(*)` }).from(transactions).where(and(...conditions));
+  const countRows = await db.select({ count: sql<number>`count(*)::int` }).from(transactions).where(and(...conditions));
   return { rows, total: Number(countRows[0]?.count ?? 0), page, pageSize };
 }
 
@@ -530,7 +530,7 @@ export async function listUnmatchedReceipts(organizationId: string, opts: { page
     .limit(pageSize)
     .offset((page - 1) * pageSize);
 
-  const countRows = await db.select({ count: sql<number>`count(*)` }).from(receipts).where(and(...conditions));
+  const countRows = await db.select({ count: sql<number>`count(*)::int` }).from(receipts).where(and(...conditions));
   return { rows, total: Number(countRows[0]?.count ?? 0), page, pageSize };
 }
 

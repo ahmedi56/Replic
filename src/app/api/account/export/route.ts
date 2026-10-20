@@ -5,7 +5,7 @@ export const runtime = 'nodejs';
 
 /** Download everything this account holds as JSON. */
 export const GET = withAuth(async (auth) => {
-  rateLimit(`account-export:${auth.userId}`, 5, 60_000);
+  await rateLimit(`account-export:${auth.userId}`, 5, 60_000);
   const data = await exportAccountData(auth);
   return new Response(JSON.stringify(data, null, 2), {
     headers: {

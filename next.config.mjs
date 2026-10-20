@@ -31,7 +31,7 @@ const nextConfig = {
   // otherwise be picked as the workspace root.
   outputFileTracingRoot: path.dirname(fileURLToPath(import.meta.url)),
   // Native / Node-only packages stay out of the webpack bundle and are loaded by Node.
-  serverExternalPackages: ['better-sqlite3', 'bcryptjs'],
+  serverExternalPackages: ['pg', '@electric-sql/pglite', '@aws-sdk/client-s3', 'bcryptjs'],
   async headers() {
     return [
       {

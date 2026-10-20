@@ -28,7 +28,7 @@ export const GET = withAuth(async (auth, req) => {
  * bar, which keeps a 100-file drop responsive and lets a single bad file fail alone.
  */
 export const POST = withAuth(async (auth, req) => {
-  rateLimit(clientKey(req, 'upload'), 300, 60_000);
+  await rateLimit(clientKey(req, 'upload'), 300, 60_000);
 
   // A body that isn't multipart form data is the caller's mistake, not a server fault.
   const form = await req.formData().catch(() => {
@@ -58,7 +58,7 @@ async function enforceQuota(organizationId: string): Promise<void> {
   const used = Number(
     (
       await db
-        .select({ count: sql<number>`count(*)` })
+        .select({ count: sql<number>`count(*)::int` })
         .from(receipts)
         .where(
           and(

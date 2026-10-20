@@ -16,10 +16,10 @@ import type { AuthContext } from '@/lib/auth/session';
  */
 
 const workdir = fs.mkdtempSync(path.join(os.tmpdir(), 'reclip-test-'));
-const dbFile = path.join(workdir, 'test.db');
+const dbDir = path.join(workdir, 'pg');
 const storageDir = path.join(workdir, 'storage');
 
-process.env.DATABASE_URL = `file:${dbFile}`;
+process.env.DATABASE_URL = `pglite:${dbDir}`;
 process.env.STORAGE_DIR = storageDir;
 process.env.EXTRACTION_PROVIDER = 'local';
 process.env.SEMANTIC_PROVIDER = 'local';
@@ -80,7 +80,7 @@ beforeAll(async () => {
   // Build the schema in the temp database using the real migration path.
   execFileSync('node', ['node_modules/tsx/dist/cli.mjs', 'scripts/migrate.ts'], {
     cwd: process.cwd(),
-    env: { ...process.env, DATABASE_URL: `file:${dbFile}` },
+    env: { ...process.env, DATABASE_URL: `pglite:${dbDir}` },
     stdio: 'pipe',
   });
 
@@ -140,9 +140,9 @@ beforeAll(async () => {
   storageKeyA = rowA!.receipt.storageKey;
 });
 
-afterAll(() => {
-  // Windows refuses to delete a SQLite file while a connection is still open.
-  db.$client.close();
+afterAll(async () => {
+  // Windows refuses to delete database files while a connection is still open.
+  await (await import('@/db')).closeDb();
   fs.rmSync(workdir, { recursive: true, force: true });
 });
 

@@ -3,6 +3,9 @@ import { NextResponse } from 'next/server';
 import { ZodError } from 'zod';
 import { getAuth, type AuthContext } from './auth/session';
 import { clientIp } from './client-ip';
+import { sql } from 'drizzle-orm';
+import { db } from '@/db';
+import { rateLimits } from '@/db/schema';
 
 /**
  * Shared API plumbing: authentication, error shaping and rate limiting.
@@ -75,35 +78,41 @@ function toResponse(error: unknown): NextResponse {
     return NextResponse.json({ error: 'Request body must be valid JSON', code: 'invalid_json' }, { status: 400 });
   }
   // Log server-side, return something generic. Never leak internals to the client.
-  console.error('[api] unhandled error:', error instanceof Error ? error.message : 'unknown');
+  // Drizzle's own message embeds the query parameters (emails, hashes), so it is never logged.
+  // The wrapped Postgres error in `cause` says what actually went wrong.
+  const cause = error instanceof Error && error.cause instanceof Error ? error.cause.message : null;
+  console.error('[api] unhandled error:', cause ?? (error instanceof Error && !error.message.startsWith('Failed query') ? error.message : 'database or internal error'));
   return NextResponse.json({ error: 'Something went wrong. Please try again.' }, { status: 500 });
 }
 
 /**
- * In-process fixed-window rate limiter.
- *
- * Adequate for a single-node MVP deployment; swap for a shared store (Redis) before
- * running more than one instance, since each process keeps its own counters.
+ * Fixed-window rate limiter backed by the database, so every app instance shares one count
+ * per key (an in-memory map would give each instance its own allowance, multiplying the
+ * limit by the number of servers). One atomic upsert per call: it either starts a new window
+ * or increments the current one, and returns the new count.
  */
-const buckets = new Map<string, { count: number; resetAt: number }>();
+export async function rateLimit(key: string, limit: number, windowMs: number): Promise<void> {
+  const windowEnd = new Date(Date.now() + windowMs);
+  const expired = sql`${rateLimits.resetAt} < now()`;
 
-export function rateLimit(key: string, limit: number, windowMs: number): void {
-  const now = Date.now();
-  const bucket = buckets.get(key);
+  const [row] = await db
+    .insert(rateLimits)
+    .values({ key, count: 1, resetAt: windowEnd })
+    .onConflictDoUpdate({
+      target: rateLimits.key,
+      set: {
+        count: sql`case when ${expired} then 1 else ${rateLimits.count} + 1 end`,
+        resetAt: sql`case when ${expired} then excluded.reset_at else ${rateLimits.resetAt} end`,
+      },
+    })
+    .returning({ count: rateLimits.count });
 
-  if (!bucket || bucket.resetAt < now) {
-    buckets.set(key, { count: 1, resetAt: now + windowMs });
-    return;
-  }
-  bucket.count++;
-  if (bucket.count > limit) {
+  if (row.count > limit) {
     throw new ApiError(429, 'Too many requests. Please wait a moment and try again.', 'rate_limited');
   }
 
-  // Opportunistic cleanup so the map cannot grow without bound.
-  if (buckets.size > 5000) {
-    for (const [k, v] of buckets) if (v.resetAt < now) buckets.delete(k);
-  }
+  // Housekeeping: expired windows are dead weight, and a sweep on ~1% of calls keeps the table small.
+  if (Math.random() < 0.01) await db.delete(rateLimits).where(sql`${rateLimits.resetAt} < now()`);
 }
 
 export function clientKey(req: Request, scope: string): string {
