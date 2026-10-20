@@ -7,6 +7,9 @@ export default defineConfig({
     include: ['tests/**/*.test.ts'],
     // Each integration test file owns its own SQLite file, so they must not share a process.
     fileParallelism: false,
+    // Integration setup spawns a migration subprocess and bcrypt-hashes real passwords.
+    hookTimeout: 30_000,
+    testTimeout: 30_000,
   },
   resolve: {
     alias: {

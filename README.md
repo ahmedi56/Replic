@@ -27,6 +27,7 @@ A working MVP of the full loop: **upload → extract → import → match → re
 | Categories | Nine defaults, auto-suggested on ingest, user-overridable and never overwritten |
 | Export | CSV (Excel-compatible), scoped to all / matched / review / unmatched |
 | Audit log | Every mutation to financial data, attributed to a person or to "System" |
+| Account security | Email verification (when SMTP is set), failed-login lockout, change password, data export, account deletion, sign-in history, CSP and HSTS headers |
 | Dashboard | Live counts, reconciliation rate, matched value, recent activity, spend by category |
 | Landing & onboarding | Conversion-focused landing page, persona step, demo dataset |
 | Privacy page | What is stored, what is processed, retention, deletion |
@@ -258,6 +259,9 @@ DATABASE_URL="file:./dev.db"          # required
 SESSION_SECRET="<32+ random chars>"   # required in production
 STORAGE_DIR="./storage"               # where originals live; outside the web root
 MAX_UPLOAD_BYTES=15728640             # optional, default 15MB
+TRUSTED_PROXY_HOPS=1                  # reverse proxies in front of the app (default 1 in production)
+APP_URL="https://your-domain.com"     # base URL for links in emails
+# SMTP_HOST= SMTP_PORT=587 SMTP_USER= SMTP_PASSWORD= MAIL_FROM=   # enables verification + reset emails
 
 EXTRACTION_PROVIDER="local"           # local | anthropic | openai
 SEMANTIC_PROVIDER="local"             # local | anthropic | none

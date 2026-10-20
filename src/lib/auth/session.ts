@@ -5,6 +5,7 @@ import bcrypt from 'bcryptjs';
 import { db } from '@/db';
 import { sessions, users, memberships, organizations } from '@/db/schema';
 import { newId, randomToken, sha256 } from '../ids';
+import { isMailConfigured } from '../mail';
 
 export const SESSION_COOKIE = 'reclip_session';
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 14; // 14 days
@@ -15,6 +16,8 @@ export interface AuthContext {
   name: string | null;
   persona: string | null;
   onboardedAt: Date | null;
+  /** False only while verification is required and the address is still unproven. */
+  emailVerified: boolean;
   organizationId: string;
   organizationName: string;
   role: string;
@@ -41,6 +44,12 @@ export async function createSession(userId: string): Promise<string> {
     expiresAt: new Date(Date.now() + SESSION_TTL_MS),
   });
   return token;
+}
+
+/** Hash of the caller's current session token, to tell "this session" from the others. */
+export async function currentSessionHash(): Promise<string | null> {
+  const token = (await cookies()).get(SESSION_COOKIE)?.value;
+  return token ? sha256(token) : null;
 }
 
 export async function setSessionCookie(token: string): Promise<void> {
@@ -76,6 +85,7 @@ export async function getAuth(): Promise<AuthContext | null> {
       name: users.name,
       persona: users.persona,
       onboardedAt: users.onboardedAt,
+      emailVerifiedAt: users.emailVerifiedAt,
       expiresAt: sessions.expiresAt,
       organizationId: memberships.organizationId,
       organizationName: organizations.name,
@@ -101,6 +111,8 @@ export async function getAuth(): Promise<AuthContext | null> {
     name: row.name,
     persona: row.persona,
     onboardedAt: row.onboardedAt,
+    // Without a mail provider no one can receive a link, so verification cannot be required.
+    emailVerified: Boolean(row.emailVerifiedAt) || !isMailConfigured(),
     organizationId: row.organizationId,
     organizationName: row.organizationName,
     role: row.role,

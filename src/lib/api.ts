@@ -2,6 +2,7 @@ import 'server-only';
 import { NextResponse } from 'next/server';
 import { ZodError } from 'zod';
 import { getAuth, type AuthContext } from './auth/session';
+import { clientIp } from './client-ip';
 
 /**
  * Shared API plumbing: authentication, error shaping and rate limiting.
@@ -29,7 +30,7 @@ export function forbidden(message = 'Not allowed'): ApiError {
 
 type Handler<T> = (ctx: AuthContext, req: Request, params: T) => Promise<NextResponse | Response>;
 
-export function withAuth<T = Record<string, string>>(handler: Handler<T>) {
+export function withAuth<T = Record<string, string>>(handler: Handler<T>, options: { allowUnverified?: boolean } = {}) {
   // Next 15 types a route's second argument as a required context whose `params` is a
   // promise. Static routes still receive one, so it is accepted here and simply resolves
   // to an empty object.
@@ -37,6 +38,9 @@ export function withAuth<T = Record<string, string>>(handler: Handler<T>) {
     try {
       const auth = await getAuth();
       if (!auth) return NextResponse.json({ error: 'Sign in required' }, { status: 401 });
+      if (!auth.emailVerified && !options.allowUnverified) {
+        return NextResponse.json({ error: 'Verify your email address to continue', code: 'email_unverified' }, { status: 403 });
+      }
       const params = context?.params ? await context.params : ({} as T);
       return await handler(auth, req, params);
     } catch (error) {
@@ -103,7 +107,5 @@ export function rateLimit(key: string, limit: number, windowMs: number): void {
 }
 
 export function clientKey(req: Request, scope: string): string {
-  const forwarded = req.headers.get('x-forwarded-for');
-  const ip = forwarded?.split(',')[0]?.trim() || req.headers.get('x-real-ip') || 'local';
-  return `${scope}:${ip}`;
+  return `${scope}:${clientIp(req.headers)}`;
 }

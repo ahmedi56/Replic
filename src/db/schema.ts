@@ -25,6 +25,11 @@ export const users = sqliteTable('users', {
   name: text('name'),
   persona: text('persona'), // freelancer | small_business | accountant | other
   onboardedAt: integer('onboarded_at', { mode: 'timestamp_ms' }),
+  /** Null until the address is proven (email link or password reset). */
+  emailVerifiedAt: integer('email_verified_at', { mode: 'timestamp_ms' }),
+  /** Consecutive wrong passwords; reset on success or when the lock starts. */
+  failedLogins: integer('failed_logins').notNull().default(0),
+  lockedUntil: integer('locked_until', { mode: 'timestamp_ms' }),
   createdAt: now(),
 });
 
@@ -58,6 +63,28 @@ export const passwordResetTokens = sqliteTable('password_reset_tokens', {
   expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
   usedAt: integer('used_at', { mode: 'timestamp_ms' }),
 });
+
+export const emailVerificationTokens = sqliteTable('email_verification_tokens', {
+  id: id(),
+  tokenHash: text('token_hash').notNull().unique(),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
+  usedAt: integer('used_at', { mode: 'timestamp_ms' }),
+});
+
+/** Account-level security history (sign-ins, password changes), shown to the user in Settings. */
+export const securityEvents = sqliteTable(
+  'security_events',
+  {
+    id: id(),
+    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    type: text('type').notNull(), // login | login_failed | locked | password_changed | password_reset | email_verified
+    ip: text('ip'),
+    userAgent: text('user_agent'),
+    createdAt: now(),
+  },
+  (t) => [index('security_events_user').on(t.userId, t.createdAt)],
+);
 
 /** Per-org overrides for matching weights/thresholds (JSON). Defaults in lib/matching/config.ts. */
 export const orgSettings = sqliteTable('org_settings', {

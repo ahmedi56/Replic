@@ -53,3 +53,23 @@ export async function sendPasswordResetEmail(to: string, path: string, ttlMinute
 <p style="color:#64748b">If you did not ask for this, you can ignore this email. Your password has not changed.</p>`,
   });
 }
+
+export async function sendVerificationEmail(to: string, path: string, ttlHours: number): Promise<void> {
+  const link = `${appUrl()}${path}`;
+  await getTransporter().sendMail({
+    from: process.env.MAIL_FROM,
+    to,
+    subject: 'Confirm your email for Reclip',
+    text: [
+      'Welcome to Reclip.',
+      '',
+      `Confirm your email address within ${ttlHours} hours:`,
+      link,
+      '',
+      'If you did not create an account, you can ignore this email.',
+    ].join('\n'),
+    html: `<p>Welcome to Reclip.</p>
+<p><a href="${link}">Confirm your email address</a><br>This link works for ${ttlHours} hours.</p>
+<p style="color:#64748b">If you did not create an account, you can ignore this email.</p>`,
+  });
+}

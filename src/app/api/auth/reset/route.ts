@@ -5,6 +5,7 @@ import { db } from '@/db';
 import { users, passwordResetTokens, sessions } from '@/db/schema';
 import { hashPassword } from '@/lib/auth/session';
 import { newId, randomToken, sha256 } from '@/lib/ids';
+import { recordSecurityEvent } from '@/lib/services/security';
 import { isMailConfigured, sendPasswordResetEmail } from '@/lib/mail';
 import { withoutAuth, rateLimit, clientKey, ApiError } from '@/lib/api';
 
@@ -72,7 +73,13 @@ export const PUT = withoutAuth(async (req) => {
     throw new ApiError(400, 'This reset link is invalid or has expired');
   }
 
-  await db.update(users).set({ passwordHash: await hashPassword(password) }).where(eq(users.id, record.userId));
+  // Following a link sent to the address proves the owner reads it, so it also verifies it.
+  // It also clears any failed-login lock: the owner has just proved who they are.
+  await db
+    .update(users)
+    .set({ passwordHash: await hashPassword(password), failedLogins: 0, lockedUntil: null, emailVerifiedAt: new Date() })
+    .where(eq(users.id, record.userId));
+  await recordSecurityEvent(record.userId, 'password_reset', req);
   await db.update(passwordResetTokens).set({ usedAt: new Date() }).where(eq(passwordResetTokens.id, record.id));
   // A password change invalidates every existing session for that user.
   await db.delete(sessions).where(eq(sessions.userId, record.userId));

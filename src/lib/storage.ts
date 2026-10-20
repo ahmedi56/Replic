@@ -107,6 +107,12 @@ export async function deleteDocument(organizationId: string, key: string): Promi
   await fs.rm(resolveKey(key), { force: true });
 }
 
+/** Remove every stored document for an organization (used when an account is deleted). */
+export async function deleteOrganizationDocuments(organizationId: string): Promise<void> {
+  if (!/^[\w-]+$/.test(organizationId)) throw new ApiError(400, 'Invalid organization id');
+  await fs.rm(resolveKey(organizationId), { recursive: true, force: true });
+}
+
 /** Resolve a storage key to an absolute path, refusing anything outside the root. */
 function resolveKey(key: string): string {
   const target = path.resolve(ROOT, key);

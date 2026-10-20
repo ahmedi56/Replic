@@ -6,6 +6,7 @@ import { users } from '@/db/schema';
 import { hashPassword, createSession, setSessionCookie } from '@/lib/auth/session';
 import { provisionOrganization } from '@/lib/services/org';
 import { newId } from '@/lib/ids';
+import { sendVerification } from '@/lib/services/verification';
 import { withoutAuth, rateLimit, clientKey, ApiError } from '@/lib/api';
 
 const schema = z.object({
@@ -33,6 +34,9 @@ export const POST = withoutAuth(async (req) => {
   });
 
   await provisionOrganization(body.organizationName?.trim() || `${body.name?.trim() || 'My'} workspace`, userId);
+
+  // Background: the response shouldn't wait on, or reveal anything about, the mail server.
+  void sendVerification(userId, email);
 
   const token = await createSession(userId);
   await setSessionCookie(token);

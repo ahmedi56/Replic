@@ -3,7 +3,9 @@ import { getAuth } from '@/lib/auth/session';
 import { getMatchingConfig } from '@/lib/services/org';
 import { availableProviders } from '@/lib/ai/registry';
 import { getDashboardStats } from '@/lib/services/stats';
+import { listSecurityEvents } from '@/lib/services/security';
 import { SettingsForm } from './settings-form';
+import { AccountSection } from './account-section';
 
 export const metadata = { title: 'Settings' };
 export const dynamic = 'force-dynamic';
@@ -12,7 +14,11 @@ export default async function SettingsPage() {
   const auth = await getAuth();
   if (!auth) redirect('/login');
 
-  const [config, stats] = await Promise.all([getMatchingConfig(auth.organizationId), getDashboardStats(auth.organizationId)]);
+  const [config, stats, events] = await Promise.all([
+    getMatchingConfig(auth.organizationId),
+    getDashboardStats(auth.organizationId),
+    listSecurityEvents(auth.userId),
+  ]);
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -31,6 +37,9 @@ export default async function SettingsPage() {
           }}
           hasData={stats.receipts > 0 || stats.transactions > 0}
         />
+      </div>
+      <div className="mt-5 grid gap-5">
+        <AccountSection events={events.map((e) => ({ id: e.id, type: e.type, ip: e.ip, createdAt: e.createdAt.toISOString() }))} />
       </div>
     </div>
   );
