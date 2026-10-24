@@ -11,3 +11,4 @@ dev.db-wal
 dev.db-shm
 .env.local
 .commandcode/
+.claude/

@@ -32,7 +32,9 @@ A working MVP of the full loop: **upload → extract → import → match → re
 | Landing & onboarding | Conversion-focused landing page, persona step, demo dataset |
 | Privacy page | What is stored, what is processed, retention, deletion |
 | Dark mode | Full support, system-aware, user-overridable |
-| Tests | 101 tests, including 18 integration tests against a real database |
+| Background processing | Uploads return at once; a Postgres-backed queue extracts and matches, with retries, crash recovery and live progress on the upload page |
+| Operations | `/api/health`, optional Sentry error tracking with personal data scrubbed, encrypted daily database backups with a tested restore |
+| Tests | 174 tests, including integration tests against a real (embedded) Postgres |
 
 **Not built, deliberately** (per the brief): direct bank integrations, ERP/accounting
 integrations, payroll, tax filing, invoicing, expense cards, chatbot, enterprise permissions.
@@ -75,7 +77,11 @@ src/
 │   │
 │   ├── auth/session.ts      # bcrypt + hashed session tokens
 │   ├── storage.ts           # signature validation, opaque keys, path containment
-│   ├── api.ts               # auth wrapper, error shaping, rate limiting
+│   ├── api.ts               # auth wrapper, error shaping, rate limiting (shared, in Postgres)
+│   ├── queue.ts             # job queue on Postgres: claim, retry, backoff, lease recovery
+│   ├── jobs.ts              # what the worker can do (process a receipt, back up)
+│   ├── backup.ts            # encrypted logical backups and restore
+│   ├── monitoring.ts        # optional Sentry, with personal data scrubbed
 │   └── audit.ts             # financial data never changes silently
 │
 ├── app/
@@ -263,6 +269,14 @@ TRUSTED_PROXY_HOPS=1                  # reverse proxies in front of the app (def
 APP_URL="https://your-domain.com"     # base URL for links in emails
 # SMTP_HOST= SMTP_PORT=587 SMTP_USER= SMTP_PASSWORD= MAIL_FROM=   # enables verification + reset emails
 
+# Operations (all optional)
+# JOB_CONCURRENCY=2                   # jobs one instance runs at once
+# RUN_WORKER=false                    # disable the background worker on this instance
+# HEALTH_TOKEN=<random>               # lets a monitor see queue numbers on /api/health
+# SENTRY_DSN=                         # turns on error tracking
+# BACKUP_ENCRYPTION_KEY=<64 hex>      # turns on daily backups (make one: npm run backup -- key)
+# BACKUP_HOUR_UTC=2  BACKUP_KEEP=14   # when, and how many to keep
+
 EXTRACTION_PROVIDER="local"           # local | anthropic | openai
 SEMANTIC_PROVIDER="local"             # local | anthropic | none
 # ANTHROPIC_API_KEY=                  # only if using anthropic
@@ -319,6 +333,27 @@ Before deploying:
    `TRUSTED_PROXY_HOPS` to the number of proxies in front of the app.
 5. More than one instance is supported: rate limits, sessions and data all live in Postgres.
 
+### Operating it
+
+- **Health:** `GET /api/health` returns 200 when the database answers, the queue is moving and
+  (if backups are on) the newest backup is under 36 hours old; 503 otherwise. Point an uptime
+  monitor at it. Send `Authorization: Bearer $HEALTH_TOKEN` to also see queue counts.
+- **Background work:** every instance runs a worker (`JOB_CONCURRENCY` jobs at a time). A job
+  that fails is retried with backoff, three attempts in all, and then the receipt is marked
+  failed so the user is told. A worker that dies mid-job loses its lease after five minutes and
+  another instance takes over. Add capacity by starting more instances.
+- **Errors:** set `SENTRY_DSN` to send errors to Sentry. Cookies, headers, bodies, query
+  strings, user identity, server name and query parameters are removed before sending.
+- **Backups:** set `BACKUP_ENCRYPTION_KEY` (`npm run backup -- key` makes one; keep a copy
+  somewhere other than the server). A backup runs daily after `BACKUP_HOUR_UTC`, is encrypted,
+  and is stored in the same bucket under `backups/` (keep the newest `BACKUP_KEEP`). Uploaded
+  documents are not in the backup: enable versioning or replication on the bucket. Your
+  Postgres provider's point-in-time recovery is the better first line of defence; this is the
+  copy you control.
+- **Restoring:** create an empty database, run `npm run db:push` against it, then
+  `npm run backup -- restore <name from "npm run backup -- list">` (or a downloaded `.rcbk`
+  file). It refuses to run against a database that already has data.
+
 ---
 
 ## 10. Remaining limitations
@@ -329,9 +364,9 @@ Before deploying:
    text layers, not pixels. A photo uploads and stores fine, but lands in Needs Review with
    zero extraction confidence and an "enter data manually" path. Setting
    `EXTRACTION_PROVIDER=anthropic` resolves this.
-2. **Processing is inline, not queued.** A receipt is extracted and matched during its
-   upload request. This is fine to several hundred files (the client uploads three at a
-   time), but a real queue is the right answer at scale.
+2. **Matching after a CSV import still runs inside the import request.** Receipt uploads are
+   queued; a statement import matches every receipt before it answers, which is fine for
+   thousands of rows and wants moving to the queue beyond that.
 3. **Ambiguous dates are a genuine coin-flip.** `01/02/2026` is resolved using currency as
    a locale hint and flagged at 72% confidence. The CSV importer asks the user outright;
    receipts cannot.
@@ -363,23 +398,21 @@ Before deploying:
 
 In the order I would build them.
 
-1. **Background job queue** for extraction and matching. Unblocks everything else, and turns
-   a 500-file upload from "wait" into "we'll tell you when it's done."
-2. **OCR for photographed receipts** as a first-class local option (Tesseract with a
+1. **OCR for photographed receipts** as a first-class local option (Tesseract with a
    preprocessing pass for rotation and deskew), so the free tier isn't PDF-only.
-3. **Learning from corrections.** Every confirm and reject is already logged. When a user
+2. **Learning from corrections.** Every confirm and reject is already logged. When a user
    links "SQ \*THE DAILY GRIND" to a receipt from "Daily Grind Coffee", that alias should be
    stored on the merchant and raise the score next month. This is the highest-leverage
    feature in the product and the data for it already exists.
-4. **Bulk review actions** — "confirm all above 85%", keyboard shortcuts. Directly serves
+3. **Bulk review actions** — "confirm all above 85%", keyboard shortcuts. Directly serves
    the metric that matters: time to reconcile.
-5. **Multi-currency with FX rates** on the transaction date, turning a flagged mismatch into
+4. **Multi-currency with FX rates** on the transaction date, turning a flagged mismatch into
    a scored one.
-6. **Bank feeds** (Plaid, GoCardless, Tink) to retire manual CSV import. Deliberately after
+5. **Bank feeds** (Plaid, GoCardless, Tink) to retire manual CSV import. Deliberately after
    the loop is excellent, not before.
-7. **Accounting exports** — Xero, QuickBooks, Sage — which is where an accountant's data is
+6. **Accounting exports** — Xero, QuickBooks, Sage — which is where an accountant's data is
    going anyway.
-8. **Team access**: invitations, roles, and per-client workspaces for accountants.
+7. **Team access**: invitations, roles, and per-client workspaces for accountants.
 
 ---
 

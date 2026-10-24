@@ -3,11 +3,12 @@ import { and, eq, inArray, desc, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { receipts, receiptExtractions, categories, merchants } from '@/db/schema';
 import { newId } from '../ids';
-import { putDocument, deleteDocument, type ValidatedUpload } from '../storage';
+import { putDocument, getDocument, deleteDocument, type ValidatedUpload } from '../storage';
+import { enqueue } from '../queue';
 import { extractReceipt } from '../ai/registry';
 import { normalizeMerchant } from '../matching/normalize';
 import { findDuplicate, type DuplicateCandidateInput } from '../matching/duplicates';
-import { getMatchingConfig } from './org';
+import { getMatchingConfig, loadAuthContext } from './org';
 import { suggestCategory } from './categorize';
 import { recordAudit } from '../audit';
 import { matchReceipts } from './matching';
@@ -32,20 +33,40 @@ export interface IngestResult {
   matchScore: number | null;
 }
 
-export async function ingestReceipt(auth: AuthContext, file: ValidatedUpload): Promise<IngestResult> {
+/**
+ * Stage 1: keep the document and commit the row. This is all an upload request waits for.
+ * `alsoInTransaction` runs in the same transaction as the insert, so a receipt can never
+ * exist without the job that will process it, nor a job without its receipt.
+ */
+async function storeReceipt(
+  auth: AuthContext,
+  file: ValidatedUpload,
+  alsoInTransaction?: (tx: Parameters<Parameters<typeof db.transaction>[0]>[0], receiptId: string) => Promise<void>,
+): Promise<string> {
   const receiptId = newId('rcp');
   const storageKey = await putDocument(auth.organizationId, file);
 
-  await db.insert(receipts).values({
-    id: receiptId,
-    organizationId: auth.organizationId,
-    storageKey,
-    originalName: file.originalName,
-    mimeType: file.mimeType,
-    sizeBytes: file.sizeBytes,
-    checksum: file.checksum,
-    status: 'processing',
-  });
+  try {
+    await db.transaction(async (tx) => {
+      await tx.insert(receipts).values({
+        id: receiptId,
+        organizationId: auth.organizationId,
+        storageKey,
+        originalName: file.originalName,
+        mimeType: file.mimeType,
+        sizeBytes: file.sizeBytes,
+        checksum: file.checksum,
+        status: 'processing',
+      });
+      await alsoInTransaction?.(tx, receiptId);
+    });
+  } catch (error) {
+    // Nothing references the stored file now, so do not leave it behind.
+    await deleteDocument(auth.organizationId, storageKey).catch((cleanupError) =>
+      console.error('[storage] could not remove an orphaned upload:', cleanupError instanceof Error ? cleanupError.message : 'unknown'),
+    );
+    throw error;
+  }
 
   await recordAudit({
     organizationId: auth.organizationId,
@@ -56,6 +77,47 @@ export async function ingestReceipt(auth: AuthContext, file: ValidatedUpload): P
     entityId: receiptId,
     detail: file.originalName,
   });
+  return receiptId;
+}
+
+/**
+ * Accept an upload and queue it for processing. Returns as soon as the file is safe, with the
+ * receipt in `processing`; a worker extracts and matches it, and the UI watches the status.
+ */
+export async function ingestReceipt(auth: AuthContext, file: ValidatedUpload): Promise<IngestResult> {
+  const receiptId = await storeReceipt(auth, file, (tx, id) =>
+    enqueue(PROCESS_RECEIPT_JOB, { receiptId: id, organizationId: auth.organizationId, userId: auth.userId }, { executor: tx }).then(() => undefined),
+  );
+  return { receiptId, status: 'processing', duplicateOf: null, overallConfidence: 0, matchedTransactionId: null, matchScore: null };
+}
+
+/** Store and process in one go, without the queue. Used by the demo loader and by tests. */
+export async function ingestReceiptNow(auth: AuthContext, file: ValidatedUpload): Promise<IngestResult> {
+  const receiptId = await storeReceipt(auth, file);
+  return (await processReceipt(receiptId, auth.organizationId, auth.userId)) as IngestResult;
+}
+
+export const PROCESS_RECEIPT_JOB = 'process_receipt';
+
+/**
+ * Stage 2: extract, categorize, de-duplicate and match. Safe to run again after a failure:
+ * it starts by clearing anything a previous, interrupted attempt wrote. Returns null if the
+ * receipt (or its owner) was deleted while it waited in the queue.
+ */
+export async function processReceipt(receiptId: string, organizationId: string, userId: string): Promise<IngestResult | null> {
+  const row = (
+    await db
+      .select()
+      .from(receipts)
+      .where(and(eq(receipts.id, receiptId), eq(receipts.organizationId, organizationId)))
+      .limit(1)
+  )[0];
+  if (!row) return null;
+  const auth = await loadAuthContext(userId, organizationId);
+  if (!auth) return null;
+
+  const bytes = await getDocument(organizationId, row.storageKey);
+  await db.delete(receiptExtractions).where(eq(receiptExtractions.receiptId, receiptId));
 
   // --- Extraction -------------------------------------------------------------
   let fields: ExtractedFields;
@@ -65,7 +127,7 @@ export async function ingestReceipt(auth: AuthContext, file: ValidatedUpload): P
 
   try {
     await db.update(receipts).set({ status: 'extracting', updatedAt: new Date() }).where(eq(receipts.id, receiptId));
-    const result = await extractReceipt({ bytes: file.bytes, mimeType: file.mimeType, originalName: file.originalName });
+    const result = await extractReceipt({ bytes, mimeType: row.mimeType, originalName: row.originalName });
     fields = result.fields;
     confidence = result.confidence;
     overallConfidence = result.overallConfidence;

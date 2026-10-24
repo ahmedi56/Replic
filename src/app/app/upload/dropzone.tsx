@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Alert, Card, ProgressBar, Spinner } from '@/components/ui';
@@ -16,11 +16,15 @@ import { Alert, Card, ProgressBar, Spinner } from '@/components/ui';
 
 const ACCEPT = '.jpg,.jpeg,.png,.webp,.pdf,image/jpeg,image/png,image/webp,application/pdf';
 const CONCURRENCY = 3;
+const POLL_MS = 2000;
+const PROCESSING_TIMEOUT_MS = 5 * 60_000;
 
 interface FileState {
   name: string;
-  status: 'queued' | 'uploading' | 'done' | 'failed';
+  status: 'queued' | 'uploading' | 'processing' | 'done' | 'failed';
   error?: string;
+  /** When the file reached the server, to stop waiting on a job that never finishes. */
+  sentAt?: number;
   receiptId?: string;
   merchantLabel?: string;
   matched?: boolean;
@@ -32,8 +36,9 @@ export function UploadDropzone() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [files, setFiles] = useState<FileState[]>([]);
-  const [running, setRunning] = useState(false);
 
+  // Between "uploaded" and "done" a background worker is extracting and matching the file.
+  const busy = files.some((f) => f.status === 'queued' || f.status === 'uploading' || f.status === 'processing');
   const processed = files.filter((f) => f.status === 'done' || f.status === 'failed').length;
   const succeeded = files.filter((f) => f.status === 'done').length;
   const failed = files.filter((f) => f.status === 'failed');
@@ -45,7 +50,6 @@ export function UploadDropzone() {
       if (!selected.length) return;
       const startIndex = files.length;
       setFiles((prev) => [...prev, ...selected.map((f) => ({ name: f.name, status: 'queued' as const }))]);
-      setRunning(true);
 
       let cursor = 0;
       async function worker() {
@@ -71,15 +75,7 @@ export function UploadDropzone() {
 
             setFiles((prev) =>
               prev.map((f, i) =>
-                i === stateIndex
-                  ? {
-                      ...f,
-                      status: 'done',
-                      receiptId: data.receiptId,
-                      matched: Boolean(data.matchedTransactionId),
-                      duplicate: Boolean(data.duplicateOf),
-                    }
-                  : f,
+                i === stateIndex ? { ...f, status: 'processing', receiptId: data.receiptId, sentAt: Date.now() } : f,
               ),
             );
           } catch {
@@ -91,11 +87,62 @@ export function UploadDropzone() {
       }
 
       await Promise.all(Array.from({ length: Math.min(CONCURRENCY, selected.length) }, worker));
-      setRunning(false);
-      router.refresh();
     },
-    [files.length, router],
+    [files.length],
   );
+
+  // Poll for the files a worker is still handling, and refresh the page data once all are done.
+  const waiting = files.filter((f) => f.status === 'processing' && f.receiptId).map((f) => f.receiptId as string);
+  const wasBusy = useRef(false);
+  useEffect(() => {
+    if (busy) wasBusy.current = true;
+    else if (wasBusy.current) {
+      wasBusy.current = false;
+      router.refresh();
+    }
+  }, [busy, router]);
+
+  useEffect(() => {
+    if (waiting.length === 0) return;
+    let cancelled = false;
+
+    async function poll() {
+      try {
+        const ids = waiting.slice(0, 100).join(',');
+        const res = await fetch(`/api/receipts/status?ids=${ids}`);
+        if (!res.ok || cancelled) return;
+        const data = (await res.json()) as { receipts: Array<{ id: string; done: boolean; failed: boolean; duplicate: boolean; matched: boolean }> };
+        const byId = new Map(data.receipts.map((r) => [r.id, r]));
+        setFiles((prev) =>
+          prev.map((f) => {
+            if (f.status !== 'processing' || !f.receiptId) return f;
+            const r = byId.get(f.receiptId);
+            if (r?.done) {
+              return r.failed
+                ? { ...f, status: 'failed', error: 'Could not read this file' }
+                : { ...f, status: 'done', matched: r.matched, duplicate: r.duplicate };
+            }
+            // Gave up waiting: the receipt is saved, it just has not finished yet.
+            if (f.sentAt && Date.now() - f.sentAt > PROCESSING_TIMEOUT_MS) {
+              return { ...f, status: 'failed', error: 'Still processing. It will appear in your receipts when done' };
+            }
+            return f;
+          }),
+        );
+      } catch {
+        // A dropped request is retried on the next tick; nothing is lost, the work is on the server.
+      }
+    }
+
+    const timer = setInterval(poll, POLL_MS);
+    void poll();
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+    // The set of ids being waited on is what matters, not the identity of the array.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [waiting.join(',')]);
 
   function onDrop(event: React.DragEvent) {
     event.preventDefault();
@@ -169,7 +216,7 @@ export function UploadDropzone() {
       {files.length > 0 && (
         <Card className="p-5">
           <div className="flex items-baseline justify-between gap-3">
-            <p className="text-sm font-medium">{running ? 'Processing receipts…' : 'Finished'}</p>
+            <p className="text-sm font-medium">{busy ? 'Processing receipts…' : 'Finished'}</p>
             <p className="num text-sm" style={{ color: 'var(--text-muted)' }}>
               {processed} / {files.length} processed
             </p>
@@ -178,7 +225,7 @@ export function UploadDropzone() {
             <ProgressBar value={(processed / files.length) * 100} label="Upload progress" />
           </div>
 
-          {!running && (
+          {!busy && (
             <div className="mt-5 grid gap-3">
               <div className="flex flex-wrap gap-2 text-xs">
                 <span className="chip" style={{ background: 'color-mix(in srgb, var(--accent) 15%, transparent)', color: 'var(--accent-ink)' }}>
@@ -241,7 +288,7 @@ export function UploadDropzone() {
             {files.slice(-40).map((f, i) => (
               <li key={`${f.name}-${i}`} className="flex items-center gap-2.5 rounded px-2 py-1.5 text-xs">
                 <span className="w-4 shrink-0 text-center" aria-hidden="true">
-                  {f.status === 'done' ? '✓' : f.status === 'failed' ? '×' : f.status === 'uploading' ? <Spinner size={12} /> : '·'}
+                  {f.status === 'done' ? '✓' : f.status === 'failed' ? '×' : f.status === 'uploading' || f.status === 'processing' ? <Spinner size={12} /> : '·'}
                 </span>
                 <span className="min-w-0 flex-1 truncate" style={{ color: f.status === 'failed' ? 'var(--danger)' : 'var(--text-muted)' }}>
                   {f.name}

@@ -256,8 +256,8 @@ describe('deleting a receipt removes its stored file', () => {
 
     const make = (name: string, total: string) =>
       storage.validateUpload(pdfLib.makeReceiptPdf([name, 'Date: 2026-09-28', `Total: EUR ${total}`]), `${name}.pdf`, 'application/pdf');
-    const one = await receipts.ingestReceipt(ctx, make('Alpha Cafe', '10.00'));
-    const two = await receipts.ingestReceipt(ctx, make('Beta Shop', '20.00'));
+    const one = await receipts.ingestReceiptNow(ctx, make('Alpha Cafe', '10.00'));
+    const two = await receipts.ingestReceiptNow(ctx, make('Beta Shop', '20.00'));
 
     const rows = await db.select().from(schema.receipts).where(eq(schema.receipts.organizationId, ctx.organizationId));
     const keyOf = (id: string) => rows.find((r) => r.id === id)!.storageKey;

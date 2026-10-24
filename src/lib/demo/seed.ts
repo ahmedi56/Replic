@@ -4,7 +4,7 @@ import { db } from '@/db';
 import { receipts, transactions, matches, imports, bankAccounts, merchants, auditLogs } from '@/db/schema';
 import { makeReceiptPdf } from './pdf';
 import { validateUpload, deleteOrganizationDocuments } from '../storage';
-import { ingestReceipt } from '../services/receipts';
+import { ingestReceiptNow } from '../services/receipts';
 import { commitImport } from '../services/imports';
 import { matchReceipts } from '../services/matching';
 import { recordAudit } from '../audit';
@@ -172,7 +172,7 @@ export async function loadDemoData(auth: AuthContext): Promise<{ receipts: numbe
     const pdf = makeReceiptPdf(buildReceiptLines(entry, index));
     const safeName = entry.merchant.toLowerCase().replace(/[^a-z0-9]+/g, '-');
     const file = validateUpload(pdf, `${safeName}-${isoDaysAgo(entry.daysAgo)}.pdf`, 'application/pdf');
-    await ingestReceipt(auth, file);
+    await ingestReceiptNow(auth, file);
     receiptCount++;
   }
 

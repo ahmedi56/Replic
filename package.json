@@ -11,6 +11,7 @@
     "build": "next build",
     "start": "next start -p 3000",
     "db:push": "tsx --env-file-if-exists=.env scripts/migrate.ts",
+    "backup": "tsx --conditions=react-server --tsconfig tsconfig.json --env-file-if-exists=.env scripts/backup.ts",
     "setup": "tsx --env-file-if-exists=.env scripts/migrate.ts",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -20,6 +21,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1154.0",
     "@electric-sql/pglite": "^0.5.10",
+    "@sentry/node": "^11.8.0",
     "bcryptjs": "^3.0.2",
     "drizzle-orm": "^0.45.3",
     "next": "^15.5.26",

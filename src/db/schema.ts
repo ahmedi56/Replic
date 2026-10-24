@@ -97,6 +97,29 @@ export const rateLimits = pgTable('rate_limits', {
   resetAt: ts('reset_at').notNull(),
 });
 
+/**
+ * Background work (receipt extraction and matching). A row is claimed by a worker with
+ * FOR UPDATE SKIP LOCKED, so no job runs twice even with several app instances. A worker that
+ * dies leaves `lockedUntil` in the past, which makes the job claimable again.
+ */
+export const jobs = pgTable(
+  'jobs',
+  {
+    id: id(),
+    type: text('type').notNull(),
+    payload: text('payload').notNull(), // JSON; ids only, never document contents
+    status: text('status').notNull().default('queued'), // queued | running | done | failed
+    attempts: integer('attempts').notNull().default(0),
+    maxAttempts: integer('max_attempts').notNull().default(3),
+    runAt: ts('run_at').notNull().defaultNow(),
+    lockedUntil: ts('locked_until'),
+    lastError: text('last_error'),
+    createdAt: now(),
+    finishedAt: ts('finished_at'),
+  },
+  (t) => [index('jobs_claim').on(t.status, t.runAt)],
+);
+
 /** Per-org overrides for matching weights/thresholds (JSON). Defaults in lib/matching/config.ts. */
 export const orgSettings = pgTable('org_settings', {
   id: id(),

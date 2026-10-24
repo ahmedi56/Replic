@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { ZodError } from 'zod';
 import { getAuth, type AuthContext } from './auth/session';
 import { clientIp } from './client-ip';
+import { captureError } from './monitoring';
 import { sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { rateLimits } from '@/db/schema';
@@ -81,6 +82,7 @@ function toResponse(error: unknown): NextResponse {
   // Drizzle's own message embeds the query parameters (emails, hashes), so it is never logged.
   // The wrapped Postgres error in `cause` says what actually went wrong.
   const cause = error instanceof Error && error.cause instanceof Error ? error.cause.message : null;
+  captureError(error);
   console.error('[api] unhandled error:', cause ?? (error instanceof Error && !error.message.startsWith('Failed query') ? error.message : 'database or internal error'));
   return NextResponse.json({ error: 'Something went wrong. Please try again.' }, { status: 500 });
 }

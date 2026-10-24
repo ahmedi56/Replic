@@ -108,6 +108,8 @@ export interface StorageBackend {
   get(key: string): Promise<Buffer>;
   remove(key: string): Promise<void>;
   removePrefix(prefix: string): Promise<void>;
+  /** Keys under a prefix, in no particular order. */
+  list(prefix: string): Promise<string[]>;
 }
 
 export function createLocalBackend(root: string): StorageBackend {
@@ -133,6 +135,14 @@ export function createLocalBackend(root: string): StorageBackend {
     },
     async removePrefix(prefix) {
       await fs.rm(resolveKey(prefix), { recursive: true, force: true });
+    },
+    async list(prefix) {
+      const dir = resolveKey(prefix);
+      const entries = await fs.readdir(dir, { recursive: true, withFileTypes: true }).catch((error: NodeJS.ErrnoException) => {
+        if (error.code === 'ENOENT') return [];
+        throw error;
+      });
+      return entries.filter((e) => e.isFile()).map((e) => path.posix.join(prefix.replace(/\/+$/, ''), path.relative(dir, path.join(e.parentPath, e.name)).split(path.sep).join('/')));
     },
   };
 }
@@ -174,6 +184,16 @@ export function createS3Backend(
         }
         token = page.IsTruncated ? page.NextContinuationToken : undefined;
       } while (token);
+    },
+    async list(prefix) {
+      const found: string[] = [];
+      let token: string | undefined;
+      do {
+        const page = await client.send(new ListObjectsV2Command({ Bucket: bucket, Prefix: prefix, ContinuationToken: token }));
+        for (const object of page.Contents ?? []) if (object.Key) found.push(object.Key);
+        token = page.IsTruncated ? page.NextContinuationToken : undefined;
+      } while (token);
+      return found;
     },
   };
 }
@@ -236,4 +256,34 @@ export async function deleteDocument(organizationId: string, key: string): Promi
 export async function deleteOrganizationDocuments(organizationId: string): Promise<void> {
   if (!/^[\w-]+$/.test(organizationId)) throw new ApiError(400, 'Invalid organization id');
   await getBackend().removePrefix(`${organizationId}/`);
+}
+
+/**
+ * Backups live in the same store as documents, under their own prefix. Organization ids all
+ * start with "org_", so this prefix can never collide with, or be read through, a tenant's
+ * document keys (`getDocument` insists on the caller's own organization prefix).
+ */
+export const BACKUP_PREFIX = 'backups/';
+
+function assertBackupKey(key: string): void {
+  if (!key.startsWith(BACKUP_PREFIX) || key.includes('..')) throw new ApiError(400, 'Not a backup key');
+}
+
+export async function putBackupObject(key: string, bytes: Buffer): Promise<void> {
+  assertBackupKey(key);
+  await getBackend().put(key, bytes, 'application/octet-stream');
+}
+
+export async function getBackupObject(key: string): Promise<Buffer> {
+  assertBackupKey(key);
+  return getBackend().get(key);
+}
+
+export async function listBackupObjects(): Promise<string[]> {
+  return (await getBackend().list(BACKUP_PREFIX)).sort();
+}
+
+export async function deleteBackupObject(key: string): Promise<void> {
+  assertBackupKey(key);
+  await getBackend().remove(key);
 }

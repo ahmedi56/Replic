@@ -35,7 +35,7 @@ let storageKeyA: string;
 let db: typeof import('@/db').db;
 let schema: typeof import('@/db/schema');
 let services: {
-  ingestReceipt: typeof import('@/lib/services/receipts').ingestReceipt;
+  ingestReceiptNow: typeof import('@/lib/services/receipts').ingestReceiptNow;
   listReceipts: typeof import('@/lib/services/receipts').listReceipts;
   getReceipt: typeof import('@/lib/services/receipts').getReceipt;
   deleteReceipts: typeof import('@/lib/services/receipts').deleteReceipts;
@@ -131,7 +131,7 @@ beforeAll(async () => {
       force: true,
     });
     const file = services.validateUpload(receiptPdf(merchant, 47.85), `${merchant}.pdf`, 'application/pdf');
-    const result = await services.ingestReceipt(ctx, file);
+    const result = await services.ingestReceiptNow(ctx, file);
     if (ctx === orgA) receiptA = result.receiptId;
     else receiptB = result.receiptId;
   }
@@ -266,7 +266,7 @@ describe('duplicate protection across the real pipeline', () => {
 
   it('flags a byte-identical receipt re-upload', async () => {
     const file = services.validateUpload(receiptPdf('Carrefour', 47.85), 'Carrefour.pdf', 'application/pdf');
-    const result = await services.ingestReceipt(orgA, file);
+    const result = await services.ingestReceiptNow(orgA, file);
     expect(result.duplicateOf).toBe(receiptA);
     expect(result.status).toBe('needs_review');
   });
@@ -313,7 +313,7 @@ describe('review queue quality', () => {
     });
 
     const file = services.validateUpload(receiptPdf('Carrefour', 47.85), 'carrefour.pdf', 'application/pdf');
-    const { receiptId } = await services.ingestReceipt(ctx, file);
+    const { receiptId } = await services.ingestReceiptNow(ctx, file);
 
     const all = await services.listMatchesForReceipt(organizationId, receiptId);
     const best = all.find((m) => m.status === 'auto' || m.status === 'confirmed');
