@@ -6,9 +6,10 @@ import { db } from '@/db';
 import { sessions, users, memberships, organizations } from '@/db/schema';
 import { newId, randomToken, sha256 } from '../ids';
 import { isMailConfigured } from '../mail';
+import { SESSION_DAYS } from '../retention';
 
 export const SESSION_COOKIE = 'reclip_session';
-const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 14; // 14 days
+const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * SESSION_DAYS;
 
 export interface AuthContext {
   userId: string;

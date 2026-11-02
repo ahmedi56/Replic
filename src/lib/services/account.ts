@@ -77,6 +77,8 @@ export async function exportAccountData(auth: AuthContext) {
       persona: user.persona,
       createdAt: user.createdAt,
       emailVerifiedAt: user.emailVerifiedAt,
+      termsAcceptedAt: user.termsAcceptedAt,
+      termsVersion: user.termsVersion,
     },
     organization: { id: org, name: auth.organizationName },
     categories: categoryRows,

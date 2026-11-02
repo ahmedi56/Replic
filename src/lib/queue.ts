@@ -3,6 +3,7 @@ import { eq, sql } from 'drizzle-orm';
 import { db, type Database } from '@/db';
 import { jobs } from '@/db/schema';
 import { newId } from './ids';
+import { JOB_RETENTION_DAYS } from './retention';
 import { captureError, sanitizeError } from './monitoring';
 
 /**
@@ -199,7 +200,8 @@ export async function queueStats(): Promise<{ queued: number; running: number; f
   return { queued: row.queued, running: row.running, failed: row.failed, oldestQueuedSeconds: row.oldestQueuedSeconds ?? null };
 }
 
-/** Delete finished jobs after a week, so the table stays small. */
+/** Delete finished jobs after `JOB_RETENTION_DAYS`, so the table stays small. */
 export async function pruneJobs(): Promise<void> {
-  await db.delete(jobs).where(sql`${jobs.status} in ('done', 'failed') and ${jobs.finishedAt} < now() - interval '7 days'`);
+  const cutoff = new Date(Date.now() - JOB_RETENTION_DAYS * 86_400_000);
+  await db.delete(jobs).where(sql`${jobs.status} in ('done', 'failed') and ${jobs.finishedAt} < ${cutoff}`);
 }

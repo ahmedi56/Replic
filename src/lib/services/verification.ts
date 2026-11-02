@@ -3,10 +3,11 @@ import { and, eq, isNull } from 'drizzle-orm';
 import { db } from '@/db';
 import { emailVerificationTokens, users } from '@/db/schema';
 import { newId, randomToken, sha256 } from '../ids';
+import { EMAIL_VERIFICATION_HOURS } from '../retention';
 import { isMailConfigured, sendVerificationEmail } from '../mail';
 import { recordSecurityEvent } from './security';
 
-const TTL_MS = 1000 * 60 * 60 * 24;
+const TTL_MS = 1000 * 60 * 60 * EMAIL_VERIFICATION_HOURS;
 
 /**
  * Create a verification link and email it. Does nothing without a mail provider, because a

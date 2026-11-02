@@ -5,6 +5,7 @@ import { db } from '@/db';
 import { users, passwordResetTokens, sessions } from '@/db/schema';
 import { hashPassword } from '@/lib/auth/session';
 import { newId, randomToken, sha256 } from '@/lib/ids';
+import { PASSWORD_RESET_MINUTES } from '@/lib/retention';
 import { recordSecurityEvent } from '@/lib/services/security';
 import { isMailConfigured, sendPasswordResetEmail } from '@/lib/mail';
 import { withoutAuth, rateLimit, clientKey, ApiError } from '@/lib/api';
@@ -12,7 +13,7 @@ import { withoutAuth, rateLimit, clientKey, ApiError } from '@/lib/api';
 const requestSchema = z.object({ email: z.string().email().max(200) });
 const confirmSchema = z.object({ token: z.string().min(10).max(200), password: z.string().min(10).max(200) });
 
-const TTL_MS = 1000 * 60 * 30;
+const TTL_MS = 1000 * 60 * PASSWORD_RESET_MINUTES;
 
 /**
  * Request a reset link.

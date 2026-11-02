@@ -16,11 +16,20 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
     setBusy(true);
 
     const form = new FormData(event.currentTarget);
+    if (mode === 'signup' && form.get('acceptTerms') !== 'on') {
+      setError('Please accept the Terms of Service and Privacy Policy to create your account.');
+      setBusy(false);
+      return;
+    }
     const payload = {
       email: String(form.get('email') ?? ''),
       password: String(form.get('password') ?? ''),
       ...(mode === 'signup'
-        ? { name: String(form.get('name') ?? ''), organizationName: String(form.get('organizationName') ?? '') }
+        ? {
+            name: String(form.get('name') ?? ''),
+            organizationName: String(form.get('organizationName') ?? ''),
+            acceptTerms: form.get('acceptTerms') === 'on',
+          }
         : {}),
     };
 
@@ -96,6 +105,23 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
           </p>
         )}
       </div>
+
+      {mode === 'signup' && (
+        <label className="flex items-start gap-2.5 text-sm" style={{ color: 'var(--text-muted)' }}>
+          <input type="checkbox" name="acceptTerms" required className="mt-1" />
+          <span>
+            I agree to the{' '}
+            <Link href="/terms" target="_blank" className="link">
+              Terms of Service
+            </Link>{' '}
+            and the{' '}
+            <Link href="/privacy" target="_blank" className="link">
+              Privacy Policy
+            </Link>
+            .
+          </span>
+        </label>
+      )}
 
       <button type="submit" className="btn btn-primary mt-1 w-full py-2.5" disabled={busy}>
         {busy && <Spinner />}

@@ -235,7 +235,9 @@ export default async function LandingPage() {
         <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-10 sm:flex-row sm:items-center sm:justify-between">
           <ReclipLogoFull height={72} />
           <div className="flex flex-wrap gap-5 text-sm" style={{ color: 'var(--text-muted)' }}>
+            <Link href="/terms">Terms</Link>
             <Link href="/privacy">Privacy</Link>
+            <Link href="/dpa">Data processing</Link>
             <Link href="/login">Sign in</Link>
             <Link href="/signup">Create account</Link>
           </div>

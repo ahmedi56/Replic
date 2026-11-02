@@ -6,6 +6,7 @@ import { users } from '@/db/schema';
 import { hashPassword, createSession, setSessionCookie } from '@/lib/auth/session';
 import { provisionOrganization } from '@/lib/services/org';
 import { newId } from '@/lib/ids';
+import { TERMS_VERSION } from '@/lib/legal';
 import { sendVerification } from '@/lib/services/verification';
 import { withoutAuth, rateLimit, clientKey, ApiError } from '@/lib/api';
 
@@ -15,6 +16,8 @@ const schema = z.object({
   password: z.string().min(10, 'Use at least 10 characters').max(200),
   name: z.string().max(120).optional(),
   organizationName: z.string().max(120).optional(),
+  // Click-wrap: the sign-up form sends this only when the box is ticked.
+  acceptTerms: z.literal(true, { error: 'Please accept the Terms of Service and Privacy Policy' }),
 });
 
 export const POST = withoutAuth(async (req) => {
@@ -31,6 +34,8 @@ export const POST = withoutAuth(async (req) => {
     email,
     passwordHash: await hashPassword(body.password),
     name: body.name?.trim() || null,
+    termsAcceptedAt: new Date(),
+    termsVersion: TERMS_VERSION,
   });
 
   await provisionOrganization(body.organizationName?.trim() || `${body.name?.trim() || 'My'} workspace`, userId);

@@ -31,6 +31,9 @@ export const users = pgTable('users', {
   /** Consecutive wrong passwords; reset on success or when the lock starts. */
   failedLogins: integer('failed_logins').notNull().default(0),
   lockedUntil: ts('locked_until'),
+  /** When, and to which version of the Terms, this person agreed at sign-up. */
+  termsAcceptedAt: ts('terms_accepted_at'),
+  termsVersion: text('terms_version'),
   createdAt: now(),
 });
 

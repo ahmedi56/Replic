@@ -5,6 +5,7 @@ import { promisify } from 'node:util';
 import { getTableColumns, getTableName, isTable, sql, type Table } from 'drizzle-orm';
 import type { PgTable } from 'drizzle-orm/pg-core';
 import { db } from '@/db';
+import { DEFAULT_BACKUP_KEEP } from './retention';
 import * as schema from '@/db/schema';
 import {
   BACKUP_PREFIX,
@@ -133,7 +134,7 @@ export function backupFileName(at = new Date()): string {
   return `${BACKUP_PREFIX}backup-${at.toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '')}.rcbk`;
 }
 
-/** Make a backup, store it, and remove old ones beyond `BACKUP_KEEP` (default 14). */
+/** Make a backup, store it, and remove old ones beyond `BACKUP_KEEP` (default `DEFAULT_BACKUP_KEEP`). */
 export async function createBackup(): Promise<BackupResult> {
   const key = backupKey(); // fail before reading any data if encryption is not set up
   const data = await snapshot();
@@ -147,7 +148,7 @@ export async function createBackup(): Promise<BackupResult> {
   return { key: name, bytes: file.length, rows: Object.fromEntries(Object.entries(data.tables).map(([t, rows]) => [t, rows.length])) };
 }
 
-export async function pruneBackups(keep = Number(process.env.BACKUP_KEEP ?? 14)): Promise<string[]> {
+export async function pruneBackups(keep = Number(process.env.BACKUP_KEEP ?? DEFAULT_BACKUP_KEEP)): Promise<string[]> {
   const all = (await listBackupObjects()).filter((k) => k.endsWith('.rcbk')); // names sort by time
   const old = all.slice(0, Math.max(0, all.length - Math.max(1, keep)));
   for (const name of old) await deleteBackupObject(name);

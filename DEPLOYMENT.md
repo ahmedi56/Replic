@@ -67,6 +67,11 @@ Cloudflare R2 (recommended: no download fees):
 | `BACKUP_HOUR_UTC` | `2` | Backups run after this hour |
 | `BACKUP_KEEP` | `14` | How many to keep |
 | `SENTRY_DSN` | from sentry.io (optional) | Error tracking; personal data is stripped |
+| `LEGAL_COMPANY_NAME`, `LEGAL_ADDRESS`, `LEGAL_CONTACT_EMAIL` | your company's details | Shown in the Terms and Privacy Policy |
+| `LEGAL_GOVERNING_LAW`, `LEGAL_COURTS`, `LEGAL_DATA_REGION` | e.g. `the laws of France`, `Paris, France`, `the European Union (Frankfurt)` | Same |
+| `LEGAL_EMAIL_PROVIDER`, `LEGAL_STORAGE_PROVIDER`, `LEGAL_EFFECTIVE_DATE` | provider names, a date | Same |
+| `LEGAL_SUPERVISORY_AUTHORITY` | e.g. `the CNIL (France)` | Named in the Data Processing Addendum |
+| `LEGAL_REVIEWED` | `true` only after a lawyer has reviewed `/terms`, `/privacy` and `/dpa` | Until then all three pages show a "Draft" notice |
 
 You do **not** need `SESSION_SECRET` (the app does not use it). Do not set `STORAGE_DIR` when using a bucket.
 Do not set `PORT`; Railway provides it and the app follows it.
@@ -109,6 +114,8 @@ Gmail and an Outlook address and check the inbox and the spam folder.
 - [ ] Upload a **photo** of a receipt: the merchant, date and total are read
 - [ ] Import a bank CSV and check receipts match
 - [ ] "Forgot your password": the reset email arrives and works
+- [ ] `/terms`, `/privacy` and `/dpa` show your company details, and (after review) no "Draft" notice
+- [ ] Sign-up requires ticking the Terms checkbox
 - [ ] `curl -I https://app.yourdomain.com/login` shows `Content-Security-Policy` and `Strict-Transport-Security`
 - [ ] The file appears in your bucket (`<org id>/...`) after an upload
 - [ ] Backups: set `BACKUP_HOUR_UTC` to `0` once, redeploy, and confirm a file appears under `backups/` in the bucket
@@ -117,6 +124,15 @@ Gmail and an Outlook address and check the inbox and the spam folder.
       `npm run backup -- restore <file>` with the same `BACKUP_ENCRYPTION_KEY`. Check the counts match
 - [ ] Delete your test account from Settings and confirm its data and files are gone
 - [ ] Look through the logs for anything starting `[api] unhandled error`, `[mail]`, `[queue]`
+
+## 8b. Compliance promises (do these before launch)
+
+The Data Processing Addendum says things only you can make true:
+
+- [ ] Accept the data processing terms of each service provider you use (Railway, storage, email, AI, Sentry)
+- [ ] Turn on two-factor login for Railway, GitHub, the storage provider, the email provider and your domain registrar
+- [ ] Alerts go to a mailbox you read daily, because the Addendum promises to tell customers of a breach within 48 hours
+- [ ] Details are in `go-to-market/legal-review-notes.md`, section 5
 
 ## 9. After launch
 
