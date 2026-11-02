@@ -12,3 +12,6 @@ dev.db-shm
 .env.local
 .commandcode/
 .claude/
+
+# Customer research (private, never commit)
+go-to-market/

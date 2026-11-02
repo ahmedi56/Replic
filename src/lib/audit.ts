@@ -27,7 +27,8 @@ export type AuditAction =
   | 'transaction.edited'
   | 'export.generated'
   | 'demo.loaded'
-  | 'demo.cleared';
+  | 'demo.cleared'
+  | 'plan.changed';
 
 export async function recordAudit(entry: {
   organizationId: string;

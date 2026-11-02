@@ -261,7 +261,7 @@ nothing about a document leaves the server.
 
 ```bash
 DATABASE_URL="postgres://user:pass@host:5432/reclip"   # required in production; dev default: pglite:./.data/dev
-SESSION_SECRET="<32+ random chars>"   # required in production
+# SESSION_SECRET is not used: sessions are random tokens stored hashed in the database
 STORAGE_DIR="./storage"               # local document storage, used when S3_BUCKET is not set
 # S3_BUCKET, S3_REGION, S3_ENDPOINT, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY   # S3-compatible storage
 MAX_UPLOAD_BYTES=15728640             # optional, default 15MB
@@ -323,7 +323,7 @@ npm start              # serves on :3000
 
 Before deploying:
 
-1. Set `SESSION_SECRET` to a long random value.
+1. Follow [DEPLOYMENT.md](DEPLOYMENT.md): a step-by-step Railway checklist, including the first-run checks.
 2. Set `DATABASE_URL` to your PostgreSQL server and run `npm run db:push` against it (append
    `?sslmode=require` for managed providers). The embedded development database is refused in
    production.
@@ -332,6 +332,23 @@ Before deploying:
 4. Serve over HTTPS; session cookies become `Secure` automatically in production. Set
    `TRUSTED_PROXY_HOPS` to the number of proxies in front of the app.
 5. More than one instance is supported: rate limits, sessions and data all live in Postgres.
+
+### Plans and bank-transfer billing
+
+Customers are billed by invoice and bank transfer. When a payment arrives, switch the account on:
+
+```bash
+npm run plan -- set customer@example.com pro --until 2027-11-02 --ref INV-2026-001
+```
+
+- `--until` is required for paid plans and is the last day of access (UTC). After it passes the
+  account falls back to the Free limit; nothing is deleted and nobody is locked out.
+- `--ref` records the invoice number. `--quota N` overrides the plan's monthly receipt limit.
+  `--dry-run` shows the change without making it. A plan change is written to the customer's
+  activity history.
+- `npm run plan -- list`, `show <email>` and `expiring --days 30` (who needs a renewal invoice).
+- Set `SUPPORT_EMAIL` so Settings tells customers where to ask about plans and invoices.
+- Stop `npm run dev` first when using the embedded development database.
 
 ### Operating it
 

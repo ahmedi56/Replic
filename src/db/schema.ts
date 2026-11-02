@@ -133,6 +133,10 @@ export const subscriptions = pgTable('subscriptions', {
   plan: text('plan').notNull().default('free'),
   receiptQuota: integer('receipt_quota').notNull().default(50),
   periodStart: now(),
+  /** End of the paid period. Null for Free. After this date a paid plan behaves as Free. */
+  currentPeriodEnd: ts('current_period_end'),
+  /** The invoice number or bank reference of the payment this period was activated for. */
+  paymentReference: text('payment_reference'),
 });
 
 export const categories = pgTable(

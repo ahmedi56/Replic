@@ -45,6 +45,7 @@ function activityLabel(action: string): string {
     'export.generated': 'Export generated',
     'demo.loaded': 'Demo data loaded',
     'demo.cleared': 'Workspace cleared',
+    'plan.changed': 'Plan updated',
   };
   return base[action] ?? action;
 }

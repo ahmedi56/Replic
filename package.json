@@ -9,9 +9,10 @@
   "scripts": {
     "dev": "next dev -p 3000",
     "build": "next build",
-    "start": "next start -p 3000",
+    "start": "next start",
     "db:push": "tsx --env-file-if-exists=.env scripts/migrate.ts",
     "backup": "tsx --conditions=react-server --tsconfig tsconfig.json --env-file-if-exists=.env scripts/backup.ts",
+    "plan": "tsx --conditions=react-server --tsconfig tsconfig.json --env-file-if-exists=.env scripts/plan.ts",
     "setup": "tsx --env-file-if-exists=.env scripts/migrate.ts",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -31,6 +32,7 @@
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "server-only": "^0.0.1",
+    "tsx": "^4.23.15",
     "zod": "^4.1.11"
   },
   "devDependencies": {
@@ -45,7 +47,6 @@
     "drizzle-kit": "^0.31.11",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.18",
-    "tsx": "^4.20.6",
     "typescript": "^5.9.2",
     "vitest": "^3.2.4"
   }
