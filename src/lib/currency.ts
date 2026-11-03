@@ -25,3 +25,26 @@ export function valuesLookThreeDecimal(values: string[]): boolean {
   }
   return three >= 2;
 }
+
+const validCode = (code: string | null | undefined): string | null => {
+  const c = code?.trim().toUpperCase();
+  return c && /^[A-Z]{3}$/.test(c) ? c : null;
+};
+
+/**
+ * The currency an import starts with, from the most reliable signal to the weakest:
+ *  1. the chosen bank account, which already knows its currency;
+ *  2. the currency most of the person's receipts are in, since a statement is usually in the
+ *     same currency as the receipts it will be matched to, in any country;
+ *  3. the language, as a last guess: French visitors are assumed to be in Tunisia (dinars)
+ *     while that is the market, everyone else starts with dollars.
+ * It is only a starting point, and the import screen warns when the amounts look like dinars
+ * but another currency is chosen.
+ */
+export function defaultImportCurrency(
+  accountCurrency: string | null | undefined,
+  receiptCurrency: string | null | undefined,
+  locale: 'en' | 'fr',
+): string {
+  return validCode(accountCurrency) ?? validCode(receiptCurrency) ?? (locale === 'fr' ? 'TND' : 'USD');
+}

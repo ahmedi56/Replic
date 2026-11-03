@@ -40,6 +40,7 @@ let services: {
   getReceipt: typeof import('@/lib/services/receipts').getReceipt;
   deleteReceipts: typeof import('@/lib/services/receipts').deleteReceipts;
   commitImport: typeof import('@/lib/services/imports').commitImport;
+  commonReceiptCurrency: typeof import('@/lib/services/imports').commonReceiptCurrency;
   listTransactions: typeof import('@/lib/services/imports').listTransactions;
   matchReceipts: typeof import('@/lib/services/matching').matchReceipts;
   listMatches: typeof import('@/lib/services/matching').listMatches;
@@ -332,5 +333,18 @@ describe('review queue quality', () => {
     expect(stats.matched).toBe(1);
     expect(stats.needsReview).toBe(0);
     expect(stats.unmatchedReceipts).toBe(0);
+  });
+});
+
+describe('default import currency from receipts', () => {
+  it('is the currency its own receipts were read in', async () => {
+    expect(await services.commonReceiptCurrency(orgA.organizationId)).toBe('EUR');
+  });
+
+  it('is nothing for an organization with no receipts, and never another one', async () => {
+    const userId = services.newId('usr');
+    await db.insert(schema.users).values({ id: userId, email: 'gamma@example.com', passwordHash: 'x', name: 'gamma' });
+    const organizationId = await services.provisionOrganization('gamma Ltd', userId);
+    expect(await services.commonReceiptCurrency(organizationId)).toBeNull();
   });
 });

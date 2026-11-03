@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { parseAmount, parseDate, parseReceiptText } from '@/lib/extraction/parse-text';
+import { defaultImportCurrency } from '@/lib/currency';
 import { previewCsv, parseRows } from '@/lib/import/csv';
 
 /**
@@ -262,5 +263,24 @@ describe('Tunisian bank statement import', () => {
     const mapping = previewCsv(csv).suggestedMapping;
     const { rows } = parseRows(csv, { mapping, defaultCurrency: 'EUR', dateOrder: 'dmy' });
     expect(rows[2].amount).toBe(-54600);
+  });
+});
+
+describe('default import currency', () => {
+  it('uses the bank account currency when there is one', () => {
+    expect(defaultImportCurrency('tnd', null, 'en')).toBe('TND');
+    expect(defaultImportCurrency('EUR', 'TND', 'fr')).toBe('EUR');
+  });
+
+  it('then the currency most receipts are in, whatever the language', () => {
+    expect(defaultImportCurrency(null, 'EUR', 'fr')).toBe('EUR'); // a French visitor in France
+    expect(defaultImportCurrency(undefined, 'tnd', 'en')).toBe('TND'); // an English reader in Tunisia
+  });
+
+  it('follows the language only as a last guess', () => {
+    expect(defaultImportCurrency(undefined, null, 'fr')).toBe('TND');
+    expect(defaultImportCurrency(null, undefined, 'en')).toBe('USD');
+    expect(defaultImportCurrency('', '', 'fr')).toBe('TND');
+    expect(defaultImportCurrency('??', 'xx', 'en')).toBe('USD');
   });
 });

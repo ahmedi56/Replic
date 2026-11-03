@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { getAuth } from '@/lib/auth/session';
-import { listBankAccounts } from '@/lib/services/imports';
+import { commonReceiptCurrency, listBankAccounts } from '@/lib/services/imports';
 import { ImportWizard } from './wizard';
 import { getLocale, makeT } from '@/lib/i18n/server';
 
@@ -14,7 +14,7 @@ export default async function ImportPage() {
   if (!auth) redirect('/login');
   const t = makeT(await getLocale());
 
-  const accounts = await listBankAccounts(auth.organizationId);
+  const [accounts, receiptCurrency] = await Promise.all([listBankAccounts(auth.organizationId), commonReceiptCurrency(auth.organizationId)]);
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -23,7 +23,7 @@ export default async function ImportPage() {
         {t('imp.sub')}
       </p>
       <div className="mt-6">
-        <ImportWizard accounts={accounts.map((a) => ({ id: a.id, name: a.name, currency: a.currency }))} />
+        <ImportWizard accounts={accounts.map((a) => ({ id: a.id, name: a.name, currency: a.currency }))} receiptCurrency={receiptCurrency} />
       </div>
     </div>
   );

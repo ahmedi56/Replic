@@ -1,7 +1,7 @@
 import 'server-only';
 import { and, eq, inArray, desc, sql } from 'drizzle-orm';
 import { db } from '@/db';
-import { transactions, imports, bankAccounts, categories } from '@/db/schema';
+import { transactions, imports, bankAccounts, categories, receipts, receiptExtractions } from '@/db/schema';
 import { newId } from '../ids';
 import { checksum, parseRows, type ColumnMapping, type DateOrder } from '../import/csv';
 import { suggestCategory } from './categorize';
@@ -248,6 +248,19 @@ export async function listImports(organizationId: string) {
     .where(eq(imports.organizationId, organizationId))
     .orderBy(desc(imports.createdAt))
     .limit(25);
+}
+
+/** The currency most of this organization's receipts were read in, or null when there are none yet. */
+export async function commonReceiptCurrency(organizationId: string): Promise<string | null> {
+  const rows = await db
+    .select({ currency: receiptExtractions.currency, n: sql<number>`count(*)::int` })
+    .from(receiptExtractions)
+    .innerJoin(receipts, eq(receipts.id, receiptExtractions.receiptId))
+    .where(and(eq(receipts.organizationId, organizationId), sql`${receiptExtractions.currency} is not null`))
+    .groupBy(receiptExtractions.currency)
+    .orderBy(desc(sql`count(*)`))
+    .limit(1);
+  return rows[0]?.currency ?? null;
 }
 
 export async function listBankAccounts(organizationId: string) {

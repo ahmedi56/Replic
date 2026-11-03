@@ -5,8 +5,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Alert, Card, Spinner, useToast } from '@/components/ui';
 import type { TargetField, ColumnMapping } from '@/lib/import/csv';
-import { isThreeDecimalCurrency } from '@/lib/currency';
-import { useApiError, useT } from '@/lib/i18n/client';
+import { defaultImportCurrency, isThreeDecimalCurrency } from '@/lib/currency';
+import { useApiError, useLocale, useT } from '@/lib/i18n/client';
 import type { MessageKey } from '@/lib/i18n/messages';
 
 /**
@@ -39,9 +39,16 @@ interface Preview {
   content: string;
 }
 
-export function ImportWizard({ accounts }: { accounts: Array<{ id: string; name: string; currency: string }> }) {
+export function ImportWizard({
+  accounts,
+  receiptCurrency,
+}: {
+  accounts: Array<{ id: string; name: string; currency: string }>;
+  receiptCurrency: string | null;
+}) {
   const t = useT();
   const apiError = useApiError();
+  const locale = useLocale();
   const router = useRouter();
   const toast = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -51,7 +58,7 @@ export function ImportWizard({ accounts }: { accounts: Array<{ id: string; name:
   const [dateOrder, setDateOrder] = useState<'auto' | 'dmy' | 'mdy'>('auto');
   const [accountId, setAccountId] = useState<string>(accounts[0]?.id ?? '');
   const [accountName, setAccountName] = useState(t('imp.mainAccount'));
-  const [currency, setCurrency] = useState('EUR');
+  const [currency, setCurrency] = useState(() => defaultImportCurrency(accounts[0]?.currency, receiptCurrency, locale));
   const [invertAmounts, setInvertAmounts] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -317,7 +324,12 @@ export function ImportWizard({ accounts }: { accounts: Array<{ id: string; name:
               {t('imp.account')}
             </label>
             {accounts.length > 0 ? (
-              <select id="account" className="input" value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+              <select id="account" className="input" value={accountId} onChange={(e) => {
+                  setAccountId(e.target.value);
+                  // An existing account knows its currency; a new one keeps what is typed.
+                  const picked = accounts.find((a) => a.id === e.target.value);
+                  if (picked) setCurrency(defaultImportCurrency(picked.currency, receiptCurrency, locale));
+                }}>
                 {accounts.map((a) => (
                   <option key={a.id} value={a.id}>
                     {a.name}
