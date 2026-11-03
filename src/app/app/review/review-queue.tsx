@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Card, ConfidenceBadge, Spinner, formatDate, formatMoney, useToast } from '@/components/ui';
 import type { StoredBreakdown } from '@/lib/matching/score';
-import { useLocale, useT } from '@/lib/i18n/client';
+import { useApiError, useLocale, useT } from '@/lib/i18n/client';
 import { translateReason } from '@/lib/i18n/reasons';
 import type { MessageKey } from '@/lib/i18n/messages';
 
@@ -48,6 +48,7 @@ const SIGNAL_LABEL: Record<string, MessageKey> = {
 
 export function ReviewQueue({ initial, total }: { initial: ReviewRow[]; total: number }) {
   const t = useT();
+  const apiError = useApiError();
   const locale = useLocale();
   const router = useRouter();
   const [rows, setRows] = useState(initial);
@@ -70,7 +71,7 @@ export function ReviewQueue({ initial, total }: { initial: ReviewRow[]; total: n
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         setRows(snapshot); // put it back — the decision didn't stick
-        toast.show(data.error ?? t('rev.err.save'), 'danger');
+        toast.show(apiError(data.error) ?? t('rev.err.save'), 'danger');
         return;
       }
       toast.show(action === 'confirm' ? t('rev.confirmed') : t('rev.rejected'));

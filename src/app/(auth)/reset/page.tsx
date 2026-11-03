@@ -5,10 +5,11 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Suspense } from 'react';
 import { Alert, Spinner } from '@/components/ui';
-import { useT } from '@/lib/i18n/client';
+import { useApiError, useT } from '@/lib/i18n/client';
 
 function ResetInner() {
   const t = useT();
+  const apiError = useApiError();
   const params = useSearchParams();
   const router = useRouter();
   const token = params.get('token');
@@ -33,10 +34,10 @@ function ResetInner() {
     setBusy(false);
 
     if (!res.ok) {
-      setError(data.error ?? t('common.somethingWrong'));
+      setError(apiError(data.error) ?? t('common.somethingWrong'));
       return;
     }
-    setNotice(data.message);
+    setNotice(apiError(data.message) ?? t('er.resetSent'));
     // Without a mail provider configured, the link is surfaced here in development
     // so the flow can be completed end to end.
     if (data.devLink) setDevLink(data.devLink);
@@ -57,7 +58,7 @@ function ResetInner() {
     setBusy(false);
 
     if (!res.ok) {
-      setError(data.error ?? t('common.somethingWrong'));
+      setError(apiError(data.error) ?? t('common.somethingWrong'));
       return;
     }
     router.push('/login');

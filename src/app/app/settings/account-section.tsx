@@ -3,6 +3,9 @@
 import { useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { Alert, Card, Spinner, useToast } from '@/components/ui';
+import { useApiError, useLocale, useT } from '@/lib/i18n/client';
+import { FORMAT_LOCALE } from '@/lib/i18n/config';
+import { messages, type MessageKey } from '@/lib/i18n/messages';
 
 export interface SecurityEventRow {
   id: string;
@@ -11,17 +14,12 @@ export interface SecurityEventRow {
   createdAt: string;
 }
 
-const EVENT_LABEL: Record<string, string> = {
-  login: 'Signed in',
-  login_failed: 'Failed sign-in attempt',
-  locked: 'Account locked after repeated failed attempts',
-  password_changed: 'Password changed',
-  password_reset: 'Password reset by email',
-  email_verified: 'Email address confirmed',
-};
 
 /** Password, personal data and sign-in history: the account, as opposed to the workspace. */
 export function AccountSection({ events }: { events: SecurityEventRow[] }) {
+  const t = useT();
+  const apiError = useApiError();
+  const locale = useLocale();
   const router = useRouter();
   const toast = useToast();
 
@@ -46,11 +44,11 @@ export function AccountSection({ events }: { events: SecurityEventRow[] }) {
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setPwError(body.error ?? 'Could not change the password.');
+        setPwError(apiError(body.error) ?? t('ac.err.password'));
         return;
       }
       form.reset();
-      toast.show('Password changed. Other devices have been signed out');
+      toast.show(t('ac.passwordChanged'));
       router.refresh();
     } finally {
       setPwBusy(false);
@@ -70,7 +68,7 @@ export function AccountSection({ events }: { events: SecurityEventRow[] }) {
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setDeleteError(body.error ?? 'Could not delete the account.');
+        setDeleteError(apiError(body.error) ?? t('ac.err.delete'));
         return;
       }
       router.push('/');
@@ -83,46 +81,46 @@ export function AccountSection({ events }: { events: SecurityEventRow[] }) {
   return (
     <>
       <Card className="p-5">
-        <h2 className="text-sm font-semibold">Password</h2>
+        <h2 className="text-sm font-semibold">{t('ac.password')}</h2>
         <form onSubmit={changePassword} className="mt-4 grid max-w-sm gap-4">
           {pwError && <Alert tone="danger">{pwError}</Alert>}
           <div>
             <label className="label" htmlFor="current-password">
-              Current password
+              {t('ac.current')}
             </label>
             <input id="current-password" name="current" type="password" required className="input" autoComplete="current-password" />
           </div>
           <div>
             <label className="label" htmlFor="new-password">
-              New password
+              {t('ac.new')}
             </label>
             <input id="new-password" name="next" type="password" required minLength={10} className="input" autoComplete="new-password" />
             <p className="mt-1.5 text-xs" style={{ color: 'var(--text-subtle)' }}>
-              At least 10 characters. This signs you out on every other device.
+              {t('ac.newHint')}
             </p>
           </div>
           <div>
             <button className="btn btn-primary" disabled={pwBusy}>
               {pwBusy && <Spinner />}
-              Change password
+              {t('ac.change')}
             </button>
           </div>
         </form>
       </Card>
 
       <Card className="p-5">
-        <h2 className="text-sm font-semibold">Recent account activity</h2>
+        <h2 className="text-sm font-semibold">{t('ac.activity')}</h2>
         {events.length === 0 ? (
           <p className="mt-2 text-sm" style={{ color: 'var(--text-muted)' }}>
-            Nothing recorded yet.
+            {t('ac.none')}
           </p>
         ) : (
           <ul className="mt-3 grid gap-2 text-sm">
             {events.map((event) => (
               <li key={event.id} className="flex flex-wrap items-baseline justify-between gap-x-3">
-                <span>{EVENT_LABEL[event.type] ?? event.type}</span>
+                <span>{`ac.ev.${event.type}` in messages.en ? t(`ac.ev.${event.type}` as MessageKey) : event.type}</span>
                 <span className="text-xs" style={{ color: 'var(--text-subtle)' }}>
-                  {new Date(event.createdAt).toLocaleString()}
+                  {new Date(event.createdAt).toLocaleString(FORMAT_LOCALE[locale])}
                   {event.ip && event.ip !== 'local' ? ` · ${event.ip}` : ''}
                 </span>
               </li>
@@ -130,48 +128,48 @@ export function AccountSection({ events }: { events: SecurityEventRow[] }) {
           </ul>
         )}
         <p className="mt-3 text-xs" style={{ color: 'var(--text-subtle)' }}>
-          If you see something you do not recognise, change your password.
+          {t('ac.suspicious')}
         </p>
       </Card>
 
       <Card className="p-5">
-        <h2 className="text-sm font-semibold">Your data</h2>
+        <h2 className="text-sm font-semibold">{t('ac.yourData')}</h2>
         <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
-          Download everything this account holds (receipts, transactions, matches, history) as a JSON file.
+          {t('ac.yourDataNote')}
         </p>
         <div className="mt-4">
           <a className="btn btn-ghost" href="/api/account/export" download>
-            Download my data
+            {t('ac.download')}
           </a>
         </div>
 
         <div className="mt-6 border-t pt-5">
           <h3 className="text-sm font-semibold" style={{ color: 'var(--danger)' }}>
-            Delete account
+            {t('ac.deleteTitle')}
           </h3>
           <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
-            Permanently deletes your account, workspace, receipts, uploaded documents and transactions. This cannot be undone.
+            {t('ac.deleteNote')}
           </p>
           {!deleteOpen ? (
             <button className="btn btn-danger mt-4" onClick={() => setDeleteOpen(true)}>
-              Delete my account…
+              {t('ac.deleteOpen')}
             </button>
           ) : (
             <form onSubmit={deleteAccount} className="mt-4 grid max-w-sm gap-4">
               {deleteError && <Alert tone="danger">{deleteError}</Alert>}
               <div>
                 <label className="label" htmlFor="delete-password">
-                  Confirm with your password
+                  {t('ac.confirmPassword')}
                 </label>
                 <input id="delete-password" name="password" type="password" required className="input" autoComplete="current-password" />
               </div>
               <div className="flex gap-2">
                 <button className="btn btn-danger" disabled={deleteBusy}>
                   {deleteBusy && <Spinner />}
-                  Delete everything
+                  {t('st.deleteAll')}
                 </button>
                 <button type="button" className="btn btn-ghost" onClick={() => setDeleteOpen(false)} disabled={deleteBusy}>
-                  Cancel
+                  {t('imp.cancel')}
                 </button>
               </div>
             </form>

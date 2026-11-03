@@ -15,7 +15,7 @@ import {
   useToast,
 } from '@/components/ui';
 import type { StoredBreakdown } from '@/lib/matching/score';
-import { useLocale, useT } from '@/lib/i18n/client';
+import { useApiError, useLocale, useT } from '@/lib/i18n/client';
 import { translateReason } from '@/lib/i18n/reasons';
 import { messages, type MessageKey } from '@/lib/i18n/messages';
 
@@ -110,6 +110,7 @@ export function ReceiptDetail({
   audit: Array<{ id: string; action: string; actorLabel: string; detail: string | null; createdAt: string }>;
 }) {
   const t = useT();
+  const apiError = useApiError();
   const locale = useLocale();
   const router = useRouter();
   const toast = useToast();
@@ -157,7 +158,7 @@ export function ReceiptDetail({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toast.show(data.error ?? t('dt.err.save'), 'danger');
+        toast.show(apiError(data.error) ?? t('dt.err.save'), 'danger');
         return;
       }
       toast.show(t('dt.savedRematched'));
@@ -178,7 +179,7 @@ export function ReceiptDetail({
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        toast.show(data.error ?? t('dt.err.saveShort'), 'danger');
+        toast.show(apiError(data.error) ?? t('dt.err.saveShort'), 'danger');
         return;
       }
       toast.show(successMessage);
@@ -198,7 +199,7 @@ export function ReceiptDetail({
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        toast.show(data.error ?? t('dt.err.match'), 'danger');
+        toast.show(apiError(data.error) ?? t('dt.err.match'), 'danger');
         return;
       }
       toast.show(action === 'confirm' ? t('rev.confirmed') : action === 'reject' ? t('rev.rejected') : t('dt.unlinked'));
@@ -229,7 +230,7 @@ export function ReceiptDetail({
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        toast.show(data.error ?? t('dt.err.link'), 'danger');
+        toast.show(apiError(data.error) ?? t('dt.err.link'), 'danger');
         return;
       }
       toast.show(t('dt.linked'));

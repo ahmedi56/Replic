@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Alert, Card, Spinner, useToast } from '@/components/ui';
 import type { MatchingConfig } from '@/lib/matching/config';
+import { useApiError, useT } from '@/lib/i18n/client';
+import type { MessageKey } from '@/lib/i18n/messages';
 
 /**
  * Matching is configurable, and this is where.
@@ -14,12 +16,12 @@ import type { MatchingConfig } from '@/lib/matching/config';
  * ignored.
  */
 
-const WEIGHT_FIELDS: Array<{ key: keyof MatchingConfig['weights']; label: string; hint: string }> = [
-  { key: 'amount', label: 'Amount', hint: 'The strongest signal: two purchases rarely cost exactly the same' },
-  { key: 'merchant', label: 'Merchant', hint: 'Fuzzy-matched against the normalized bank description' },
-  { key: 'date', label: 'Date', hint: 'Allows for the delay between paying and the bank posting' },
-  { key: 'currency', label: 'Currency', hint: 'A mismatch never matches automatically, whatever the weight' },
-  { key: 'paymentMethod', label: 'Payment method', hint: 'Only counted when both sides state one' },
+const WEIGHT_FIELDS: Array<{ key: keyof MatchingConfig['weights']; label: MessageKey; hint: MessageKey }> = [
+  { key: 'amount', label: 'sig.amount', hint: 'st.hint.amount' },
+  { key: 'merchant', label: 'sig.merchant', hint: 'st.hint.merchant' },
+  { key: 'date', label: 'sig.date', hint: 'st.hint.date' },
+  { key: 'currency', label: 'sig.currency', hint: 'st.hint.currency' },
+  { key: 'paymentMethod', label: 'sig.paymentMethod', hint: 'st.hint.paymentMethod' },
 ];
 
 export function SettingsForm({
@@ -31,6 +33,8 @@ export function SettingsForm({
   providers: { extraction: string; semantic: string; availableExtraction: string[]; availableSemantic: string[] };
   hasData: boolean;
 }) {
+  const t = useT();
+  const apiError = useApiError();
   const router = useRouter();
   const toast = useToast();
   const [weights, setWeights] = useState(config.weights);
@@ -52,10 +56,10 @@ export function SettingsForm({
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        toast.show(data.error ?? 'Could not save settings', 'danger');
+        toast.show(apiError(data.error) ?? t('st.err.save'), 'danger');
         return;
       }
-      toast.show('Settings saved. Re-run matching to apply them');
+      toast.show(t('st.saved'));
       router.refresh();
     } finally {
       setBusy(false);
@@ -64,9 +68,7 @@ export function SettingsForm({
 
   async function demo(action: 'load' | 'clear') {
     const confirmText =
-      action === 'load'
-        ? 'Loading the demo replaces everything in this workspace with sample data. Continue?'
-        : 'This permanently deletes every receipt, transaction and match in this workspace. Continue?';
+      action === 'load' ? t('st.confirmLoad') : t('st.confirmClear');
     if (!window.confirm(confirmText)) return;
 
     setDemoBusy(true);
@@ -74,10 +76,10 @@ export function SettingsForm({
       const res = await fetch('/api/demo', { method: action === 'load' ? 'POST' : 'DELETE' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toast.show(data.error ?? 'That did not work', 'danger');
+        toast.show(apiError(data.error) ?? t('st.err.demo'), 'danger');
         return;
       }
-      toast.show(action === 'load' ? `Demo loaded: ${data.receipts} receipts, ${data.transactions} transactions` : 'Workspace cleared');
+      toast.show(action === 'load' ? t('st.demoLoaded', { receipts: data.receipts, transactions: data.transactions }) : t('st.cleared'));
       router.push('/app');
       router.refresh();
     } finally {
@@ -89,9 +91,9 @@ export function SettingsForm({
     <div className="grid gap-5">
       {/* Weights */}
       <Card className="p-5">
-        <h2 className="text-sm font-semibold">Matching weights</h2>
+        <h2 className="text-sm font-semibold">{t('st.weights')}</h2>
         <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
-          How much each signal counts towards the final score. These should add up to 100%.
+          {t('st.weightsNote')}
         </p>
 
         <div className="mt-5 grid gap-4">
@@ -99,7 +101,7 @@ export function SettingsForm({
             <div key={field.key}>
               <div className="flex items-baseline justify-between gap-3">
                 <label className="text-sm font-medium" htmlFor={`w-${field.key}`}>
-                  {field.label}
+                  {t(field.label)}
                 </label>
                 <span className="num text-sm" style={{ color: 'var(--text-muted)' }}>
                   {Math.round(weights[field.key] * 100)}%
@@ -117,7 +119,7 @@ export function SettingsForm({
                 style={{ accentColor: 'var(--accent)' }}
               />
               <p className="mt-1 text-xs" style={{ color: 'var(--text-subtle)' }}>
-                {field.hint}
+                {t(field.hint)}
               </p>
             </div>
           ))}
@@ -125,23 +127,22 @@ export function SettingsForm({
 
         {!balanced && (
           <p className="mt-4 text-xs" style={{ color: 'var(--warn)' }}>
-            Weights add up to {Math.round(weightTotal * 100)}%. Reclip will renormalize them, but it&apos;s easier to
-            reason about at 100%.
+            {t('st.unbalanced', { pct: Math.round(weightTotal * 100) })}
           </p>
         )}
       </Card>
 
       {/* Thresholds */}
       <Card className="p-5">
-        <h2 className="text-sm font-semibold">Confidence thresholds</h2>
+        <h2 className="text-sm font-semibold">{t('st.thresholds')}</h2>
         <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
-          Where the lines fall between automatic, reviewed and ignored.
+          {t('st.thresholdsNote')}
         </p>
 
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
           <div>
             <label className="label" htmlFor="t-auto">
-              Match automatically at or above
+              {t('st.auto')}
             </label>
             <input
               id="t-auto"
@@ -155,7 +156,7 @@ export function SettingsForm({
           </div>
           <div>
             <label className="label" htmlFor="t-review">
-              Send to review at or above
+              {t('st.review')}
             </label>
             <input
               id="t-review"
@@ -169,7 +170,7 @@ export function SettingsForm({
           </div>
           <div>
             <label className="label" htmlFor="d-after">
-              Days the bank may post after the receipt
+              {t('st.daysAfter')}
             </label>
             <input
               id="d-after"
@@ -183,7 +184,7 @@ export function SettingsForm({
           </div>
           <div>
             <label className="label" htmlFor="d-before">
-              Days a transaction may precede the receipt
+              {t('st.daysBefore')}
             </label>
             <input
               id="d-before"
@@ -199,35 +200,34 @@ export function SettingsForm({
 
         {thresholds.review >= thresholds.auto && (
           <p className="mt-3 text-xs" style={{ color: 'var(--warn)' }}>
-            The review threshold should be below the automatic one, or nothing will ever reach review.
+            {t('st.thresholdWarn')}
           </p>
         )}
 
         <button className="btn btn-accent mt-5" onClick={save} disabled={busy}>
           {busy && <Spinner />}
-          Save matching settings
+          {t('st.saveMatching')}
         </button>
       </Card>
 
       {/* Providers */}
       <Card className="p-5">
-        <h2 className="text-sm font-semibold">Extraction and AI</h2>
+        <h2 className="text-sm font-semibold">{t('st.ai')}</h2>
         <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
-          Providers are chosen by environment variable, so the choice lives with whoever runs this instance rather than
-          in the app database.
+          {t('st.aiNote')}
         </p>
 
         <dl className="mt-4 grid gap-3 text-sm">
           <div className="flex justify-between gap-3">
-            <dt style={{ color: 'var(--text-muted)' }}>Extraction provider</dt>
+            <dt style={{ color: 'var(--text-muted)' }}>{t('st.extractionProvider')}</dt>
             <dd className="font-medium">{providers.extraction}</dd>
           </div>
           <div className="flex justify-between gap-3">
-            <dt style={{ color: 'var(--text-muted)' }}>Semantic matching</dt>
+            <dt style={{ color: 'var(--text-muted)' }}>{t('st.semantic')}</dt>
             <dd className="font-medium">{providers.semantic}</dd>
           </div>
           <div className="flex justify-between gap-3">
-            <dt style={{ color: 'var(--text-muted)' }}>Available here</dt>
+            <dt style={{ color: 'var(--text-muted)' }}>{t('st.available')}</dt>
             <dd className="font-medium">{providers.availableExtraction.join(', ') || 'local'}</dd>
           </div>
         </dl>
@@ -235,9 +235,8 @@ export function SettingsForm({
         {providers.extraction === 'local' || providers.extraction === 'mock' ? (
           <div className="mt-4">
             <Alert tone="info">
-              Running on the local provider: PDFs with a text layer are parsed in full, and photographed receipts are
-              accepted and stored but land in Needs Review for manual entry. Set <code className="text-xs">ANTHROPIC_API_KEY</code>{' '}
-              and <code className="text-xs">EXTRACTION_PROVIDER=anthropic</code> to read images too.
+              {t('st.localA')} <code className="text-xs">ANTHROPIC_API_KEY</code> {t('st.localB')}{' '}
+              <code className="text-xs">EXTRACTION_PROVIDER=anthropic</code> {t('st.localC')}
             </Alert>
           </div>
         ) : null}
@@ -245,21 +244,21 @@ export function SettingsForm({
 
       {/* Workspace data */}
       <Card className="p-5">
-        <h2 className="text-sm font-semibold">Workspace data</h2>
+        <h2 className="text-sm font-semibold">{t('st.data')}</h2>
         <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
-          Load a fictional dataset to explore the product, or delete everything in this workspace.
+          {t('st.dataNote')}
         </p>
         <div className="mt-4 flex flex-wrap gap-2">
           <button className="btn btn-ghost" onClick={() => demo('load')} disabled={demoBusy}>
             {demoBusy && <Spinner />}
-            {hasData ? 'Replace with demo data' : 'Load demo data'}
+            {hasData ? t('st.replaceDemo') : t('st.loadDemo')}
           </button>
           <button className="btn btn-danger" onClick={() => demo('clear')} disabled={demoBusy || !hasData}>
-            Delete everything
+            {t('st.deleteAll')}
           </button>
         </div>
         <p className="mt-3 text-xs" style={{ color: 'var(--text-subtle)' }}>
-          Deletion is immediate and permanent, documents included. Reclip keeps no shadow copy.
+          {t('st.deleteNote')}
         </p>
       </Card>
 

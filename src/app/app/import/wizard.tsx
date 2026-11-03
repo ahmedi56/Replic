@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Alert, Card, Spinner, useToast } from '@/components/ui';
 import type { TargetField, ColumnMapping } from '@/lib/import/csv';
 import { isThreeDecimalCurrency } from '@/lib/currency';
-import { useT } from '@/lib/i18n/client';
+import { useApiError, useT } from '@/lib/i18n/client';
 import type { MessageKey } from '@/lib/i18n/messages';
 
 /**
@@ -41,6 +41,7 @@ interface Preview {
 
 export function ImportWizard({ accounts }: { accounts: Array<{ id: string; name: string; currency: string }> }) {
   const t = useT();
+  const apiError = useApiError();
   const router = useRouter();
   const toast = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -67,7 +68,7 @@ export function ImportWizard({ accounts }: { accounts: Array<{ id: string; name:
       const res = await fetch('/api/imports/preview', { method: 'POST', body });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(data.error ?? t('imp.err.read'));
+        setError(apiError(data.error) ?? t('imp.err.read'));
         return;
       }
       setPreview(data);
@@ -105,11 +106,11 @@ export function ImportWizard({ accounts }: { accounts: Array<{ id: string; name:
       const data = await res.json().catch(() => ({}));
 
       if (res.status === 409 && data.code === 'duplicate_import') {
-        setDuplicatePrompt(data.error);
+        setDuplicatePrompt(apiError(data.error) ?? t('imp.dupTitle'));
         return;
       }
       if (!res.ok) {
-        setError(data.error ?? t('imp.err.import'));
+        setError(apiError(data.error) ?? t('imp.err.import'));
         return;
       }
 
@@ -154,7 +155,7 @@ export function ImportWizard({ accounts }: { accounts: Array<{ id: string; name:
               <ul className="mt-1 grid gap-1">
                 {result.issues.slice(0, 6).map((issue) => (
                   <li key={`${issue.rowNumber}-${issue.reason}`} className="text-xs">
-                    {t('imp.rowIssue', { row: issue.rowNumber, reason: issue.reason })}
+                    {t('imp.rowIssue', { row: issue.rowNumber, reason: apiError(issue.reason) ?? issue.reason })}
                   </li>
                 ))}
               </ul>

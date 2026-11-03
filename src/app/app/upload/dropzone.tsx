@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Alert, Card, ProgressBar, Spinner } from '@/components/ui';
-import { useT } from '@/lib/i18n/client';
+import { useApiError, useT } from '@/lib/i18n/client';
 
 /**
  * Bulk upload.
@@ -34,6 +34,7 @@ interface FileState {
 
 export function UploadDropzone() {
   const t = useT();
+  const apiError = useApiError();
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
@@ -70,7 +71,7 @@ export function UploadDropzone() {
 
             if (!res.ok) {
               setFiles((prev) =>
-                prev.map((f, i) => (i === stateIndex ? { ...f, status: 'failed', error: data.error ?? t('up.err.upload') } : f)),
+                prev.map((f, i) => (i === stateIndex ? { ...f, status: 'failed', error: apiError(data.error) ?? t('up.err.upload') } : f)),
               );
               continue;
             }

@@ -4,10 +4,11 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Alert, Spinner } from '@/components/ui';
-import { useT } from '@/lib/i18n/client';
+import { useApiError, useT } from '@/lib/i18n/client';
 
 export function VerifyPanel({ token, email }: { token: string | null; email: string | null }) {
   const t = useT();
+  const apiError = useApiError();
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -25,7 +26,7 @@ export function VerifyPanel({ token, email }: { token: string | null; email: str
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(data.error ?? t('common.somethingWrong'));
+        setError(apiError(data.error) ?? t('common.somethingWrong'));
         return;
       }
       setDone(true);
@@ -42,7 +43,7 @@ export function VerifyPanel({ token, email }: { token: string | null; email: str
     try {
       const res = await fetch('/api/auth/verify/resend', { method: 'POST' });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) setError(data.error ?? t('common.somethingWrong'));
+      if (!res.ok) setError(apiError(data.error) ?? t('common.somethingWrong'));
       else setNotice(t('auth.resent'));
     } finally {
       setBusy(false);

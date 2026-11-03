@@ -8,6 +8,7 @@ import { newId, randomToken, sha256 } from '@/lib/ids';
 import { PASSWORD_RESET_MINUTES } from '@/lib/retention';
 import { recordSecurityEvent } from '@/lib/services/security';
 import { isMailConfigured, sendPasswordResetEmail } from '@/lib/mail';
+import { getLocale } from '@/lib/i18n/server';
 import { withoutAuth, rateLimit, clientKey, ApiError } from '@/lib/api';
 
 const requestSchema = z.object({ email: z.string().email().max(200) });
@@ -41,7 +42,7 @@ export const POST = withoutAuth(async (req) => {
     const path = `/reset?token=${token}`;
 
     if (isMailConfigured()) {
-      sendPasswordResetEmail(rows[0].email, path, TTL_MS / 60_000).catch((error) => {
+      sendPasswordResetEmail(rows[0].email, path, TTL_MS / 60_000, await getLocale()).catch((error) => {
         // Log the reason, never the address or the link.
         console.error('[mail] password reset email failed:', error instanceof Error ? error.message : 'unknown');
       });

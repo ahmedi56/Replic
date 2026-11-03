@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
 import { messages, type MessageKey } from './messages';
+import { translateError } from './errors';
 import { DEFAULT_LOCALE, interpolate, type Locale, type Params } from './config';
 
 const LocaleContext = createContext<Locale>(DEFAULT_LOCALE);
@@ -20,4 +21,10 @@ export function useT() {
     () => (key: MessageKey, params?: Params) => interpolate(messages[locale][key] ?? messages.en[key] ?? key, params),
     [locale],
   );
+}
+
+/** Turns a message from the server into the reader's language; unknown messages are shown as written. */
+export function useApiError() {
+  const t = useT();
+  return useMemo(() => (message: unknown) => translateError(message, t), [t]);
 }

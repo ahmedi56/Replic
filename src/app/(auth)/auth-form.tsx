@@ -4,10 +4,11 @@ import { useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Alert, Spinner } from '@/components/ui';
-import { useT } from '@/lib/i18n/client';
+import { useApiError, useT } from '@/lib/i18n/client';
 
 export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
   const t = useT();
+  const apiError = useApiError();
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -44,7 +45,7 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        setError(data.error ?? t('common.tryAgain'));
+        setError(apiError(data.error) ?? t('common.tryAgain'));
         setBusy(false);
         return;
       }

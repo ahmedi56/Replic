@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Card, Spinner, useToast } from '@/components/ui';
 import { ReclipMark } from '@/components/brand';
+import { useApiError, useT } from '@/lib/i18n/client';
+import type { MessageKey } from '@/lib/i18n/messages';
 
 /**
  * First run.
@@ -14,14 +16,16 @@ import { ReclipMark } from '@/components/brand';
  * real files, rather than buried in settings.
  */
 
-const PERSONAS = [
-  { value: 'freelancer', label: 'Freelancer', detail: 'A handful of receipts a month, mostly PDFs and photos' },
-  { value: 'small_business', label: 'Small business', detail: 'Hundreds a month, VAT to track, duplicates to catch' },
-  { value: 'accountant', label: 'Accountant', detail: 'Bulk uploads across clients, exports and audit history' },
-  { value: 'other', label: 'Something else', detail: 'Just here to reconcile some receipts' },
+const PERSONAS: Array<{ value: string; label: MessageKey; detail: MessageKey }> = [
+  { value: 'freelancer', label: 'ob.p.freelancer', detail: 'ob.p.freelancerD' },
+  { value: 'small_business', label: 'ob.p.small_business', detail: 'ob.p.small_businessD' },
+  { value: 'accountant', label: 'ob.p.accountant', detail: 'ob.p.accountantD' },
+  { value: 'other', label: 'ob.p.other', detail: 'ob.p.otherD' },
 ];
 
 export function Onboarding({ name }: { name: string }) {
+  const t = useT();
+  const apiError = useApiError();
   const router = useRouter();
   const toast = useToast();
   const [persona, setPersona] = useState<string | null>(null);
@@ -49,7 +53,7 @@ export function Onboarding({ name }: { name: string }) {
       const res = await fetch('/api/demo', { method: 'POST' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toast.show(data.error ?? 'Could not load the demo', 'danger');
+        toast.show(apiError(data.error) ?? t('ob.err.demo'), 'danger');
         return;
       }
       router.push('/app');
@@ -63,13 +67,13 @@ export function Onboarding({ name }: { name: string }) {
     return (
       <Card className="p-7">
         <ReclipMark size={32} />
-        <h1 className="mt-4 text-xl font-semibold tracking-tight">Welcome to Reclip, {name}</h1>
+        <h1 className="mt-4 text-xl font-semibold tracking-tight">{t('ob.welcome', { name })}</h1>
         <p className="mt-1.5 text-sm" style={{ color: 'var(--text-muted)' }}>
-          One question, so the defaults suit you. You can change everything later.
+          {t('ob.oneQuestion')}
         </p>
 
         <fieldset className="mt-6">
-          <legend className="text-sm font-medium">What best describes you?</legend>
+          <legend className="text-sm font-medium">{t('ob.describes')}</legend>
           <div className="mt-3 grid gap-2">
             {PERSONAS.map((p) => (
               <button
@@ -79,9 +83,9 @@ export function Onboarding({ name }: { name: string }) {
                 className="rounded-lg border px-4 py-3 text-left transition-colors hover:bg-[color-mix(in_srgb,var(--accent)_7%,transparent)]"
                 style={persona === p.value ? { borderColor: 'var(--accent)' } : undefined}
               >
-                <span className="block text-sm font-medium">{p.label}</span>
+                <span className="block text-sm font-medium">{t(p.label)}</span>
                 <span className="mt-0.5 block text-xs" style={{ color: 'var(--text-muted)' }}>
-                  {p.detail}
+                  {t(p.detail)}
                 </span>
               </button>
             ))}
@@ -94,45 +98,43 @@ export function Onboarding({ name }: { name: string }) {
 
   return (
     <Card className="p-7">
-      <h1 className="text-xl font-semibold tracking-tight">Let&apos;s reconcile something</h1>
+      <h1 className="text-xl font-semibold tracking-tight">{t('ob.letsTitle')}</h1>
       <p className="mt-1.5 text-sm" style={{ color: 'var(--text-muted)' }}>
-        Two ways to start. Either takes a couple of minutes.
+        {t('ob.twoWays')}
       </p>
 
       <div className="mt-6 grid gap-3">
         <div className="rounded-lg border p-5">
-          <h2 className="text-sm font-semibold">Use your own files</h2>
+          <h2 className="text-sm font-semibold">{t('ob.own')}</h2>
           <ol className="mt-2 grid gap-1.5 text-sm" style={{ color: 'var(--text-muted)' }}>
-            <li>1. Upload your receipts: drop as many as you like at once</li>
-            <li>2. Import a bank CSV and confirm the column mapping</li>
-            <li>3. Reclip matches them and shows you only the uncertain ones</li>
+            <li>{t('ob.own1')}</li>
+            <li>{t('ob.own2')}</li>
+            <li>{t('ob.own3')}</li>
           </ol>
           <div className="mt-4 flex flex-wrap gap-2">
             <Link href="/app/upload" className="btn btn-accent">
-              Upload receipts
+              {t('nav.upload')}
             </Link>
             <Link href="/app/import" className="btn btn-ghost">
-              Import bank CSV
+              {t('nav.import')}
             </Link>
           </div>
         </div>
 
         <div className="rounded-lg border p-5">
-          <h2 className="text-sm font-semibold">See it working first</h2>
+          <h2 className="text-sm font-semibold">{t('ob.seeFirst')}</h2>
           <p className="mt-2 text-sm" style={{ color: 'var(--text-muted)' }}>
-            Load a fictional dataset: 26 receipts and 32 transactions, including a duplicate, a few that need review,
-            and some with no counterpart. It runs through the real pipeline, so what you see is the product actually
-            working.
+            {t('ob.seeFirstNote')}
           </p>
           <button className="btn btn-ghost mt-4" onClick={loadDemo} disabled={busy}>
             {busy && <Spinner />}
-            Load demo data
+            {t('st.loadDemo')}
           </button>
         </div>
       </div>
 
       <Link href="/app" className="mt-5 inline-block text-sm" style={{ color: 'var(--text-muted)' }}>
-        Skip for now
+        {t('ob.skip')}
       </Link>
       {toast.node}
     </Card>

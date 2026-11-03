@@ -1,8 +1,11 @@
 import { redirect } from 'next/navigation';
 import { getAuth } from '@/lib/auth/session';
 import { Onboarding } from './onboarding';
+import { getLocale, makeT } from '@/lib/i18n/server';
 
-export const metadata = { title: 'Welcome' };
+export async function generateMetadata() {
+  return { title: makeT(await getLocale())('ob.meta') };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function WelcomePage() {

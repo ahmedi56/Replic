@@ -3,11 +3,12 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Spinner, useToast } from '@/components/ui';
-import { useT } from '@/lib/i18n/client';
+import { useApiError, useT } from '@/lib/i18n/client';
 
 /** Re-runs matching across the workspace — useful after editing fields or weights. */
 export function RematchButton({ label }: { label?: string }) {
   const t = useT();
+  const apiError = useApiError();
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const toast = useToast();
@@ -18,7 +19,7 @@ export function RematchButton({ label }: { label?: string }) {
       const res = await fetch('/api/matches/run', { method: 'POST' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toast.show(data.error ?? t('rematch.failed'), 'danger');
+        toast.show(apiError(data.error) ?? t('rematch.failed'), 'danger');
         return;
       }
       toast.show(t('rematch.result', { auto: data.auto, review: data.review, unmatched: data.unmatched }));

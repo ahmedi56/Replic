@@ -5,6 +5,7 @@ import { emailVerificationTokens, users } from '@/db/schema';
 import { newId, randomToken, sha256 } from '../ids';
 import { EMAIL_VERIFICATION_HOURS } from '../retention';
 import { isMailConfigured, sendVerificationEmail } from '../mail';
+import { DEFAULT_LOCALE, type Locale } from '../i18n/config';
 import { recordSecurityEvent } from './security';
 
 const TTL_MS = 1000 * 60 * 60 * EMAIL_VERIFICATION_HOURS;
@@ -13,7 +14,7 @@ const TTL_MS = 1000 * 60 * 60 * EMAIL_VERIFICATION_HOURS;
  * Create a verification link and email it. Does nothing without a mail provider, because a
  * link no one receives would lock people out. Never throws: signup must not fail on mail.
  */
-export async function sendVerification(userId: string, email: string): Promise<void> {
+export async function sendVerification(userId: string, email: string, locale: Locale = DEFAULT_LOCALE): Promise<void> {
   if (!isMailConfigured()) return;
   try {
     const token = randomToken();
@@ -23,7 +24,7 @@ export async function sendVerification(userId: string, email: string): Promise<v
       userId,
       expiresAt: new Date(Date.now() + TTL_MS),
     });
-    await sendVerificationEmail(email, `/verify-email?token=${token}`, TTL_MS / 3_600_000);
+    await sendVerificationEmail(email, `/verify-email?token=${token}`, TTL_MS / 3_600_000, locale);
   } catch (error) {
     // The reason only: never the address or the link.
     console.error('[mail] verification email failed:', error instanceof Error ? error.message : 'unknown');

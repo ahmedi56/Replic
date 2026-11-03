@@ -1,5 +1,7 @@
 import 'server-only';
 import nodemailer, { type Transporter } from 'nodemailer';
+import { makeT } from './i18n/translate';
+import { DEFAULT_LOCALE, type Locale } from './i18n/config';
 
 /**
  * Outgoing email over plain SMTP, so any provider works (Gmail, Resend, SendGrid, Mailgun,
@@ -34,42 +36,30 @@ export function appUrl(): string {
   return (process.env.APP_URL ?? 'http://localhost:3000').replace(/\/+$/, '');
 }
 
-export async function sendPasswordResetEmail(to: string, path: string, ttlMinutes: number): Promise<void> {
+export async function sendPasswordResetEmail(to: string, path: string, ttlMinutes: number, locale: Locale = DEFAULT_LOCALE): Promise<void> {
   const link = `${appUrl()}${path}`;
+  const t = makeT(locale);
   await getTransporter().sendMail({
     from: process.env.MAIL_FROM,
     to,
-    subject: 'Reset your Reclip password',
-    text: [
-      'Someone asked to reset the password for your Reclip account.',
-      '',
-      `Use this link within ${ttlMinutes} minutes:`,
-      link,
-      '',
-      'If you did not ask for this, you can ignore this email. Your password has not changed.',
-    ].join('\n'),
-    html: `<p>Someone asked to reset the password for your Reclip account.</p>
-<p><a href="${link}">Choose a new password</a><br>This link works for ${ttlMinutes} minutes.</p>
-<p style="color:#64748b">If you did not ask for this, you can ignore this email. Your password has not changed.</p>`,
+    subject: t('mail.reset.subject'),
+    text: [t('mail.reset.intro'), '', t('mail.reset.useLink', { n: ttlMinutes }), link, '', t('mail.reset.ignore')].join('\n'),
+    html: `<p>${t('mail.reset.intro')}</p>
+<p><a href="${link}">${t('mail.reset.link')}</a><br>${t('mail.reset.valid', { n: ttlMinutes })}</p>
+<p style="color:#64748b">${t('mail.reset.ignore')}</p>`,
   });
 }
 
-export async function sendVerificationEmail(to: string, path: string, ttlHours: number): Promise<void> {
+export async function sendVerificationEmail(to: string, path: string, ttlHours: number, locale: Locale = DEFAULT_LOCALE): Promise<void> {
   const link = `${appUrl()}${path}`;
+  const t = makeT(locale);
   await getTransporter().sendMail({
     from: process.env.MAIL_FROM,
     to,
-    subject: 'Confirm your email for Reclip',
-    text: [
-      'Welcome to Reclip.',
-      '',
-      `Confirm your email address within ${ttlHours} hours:`,
-      link,
-      '',
-      'If you did not create an account, you can ignore this email.',
-    ].join('\n'),
-    html: `<p>Welcome to Reclip.</p>
-<p><a href="${link}">Confirm your email address</a><br>This link works for ${ttlHours} hours.</p>
-<p style="color:#64748b">If you did not create an account, you can ignore this email.</p>`,
+    subject: t('mail.verify.subject'),
+    text: [t('mail.verify.intro'), '', t('mail.verify.useLink', { n: ttlHours }), link, '', t('mail.verify.ignore')].join('\n'),
+    html: `<p>${t('mail.verify.intro')}</p>
+<p><a href="${link}">${t('mail.verify.link')}</a><br>${t('mail.verify.valid', { n: ttlHours })}</p>
+<p style="color:#64748b">${t('mail.verify.ignore')}</p>`,
   });
 }

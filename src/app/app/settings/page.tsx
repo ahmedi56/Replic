@@ -8,17 +8,26 @@ import { getEffectiveSubscription, getSubscription } from '@/lib/services/plans'
 import { Card } from '@/components/ui';
 import { SettingsForm } from './settings-form';
 import { AccountSection } from './account-section';
+import { getLocale, makeT } from '@/lib/i18n/server';
+import { FORMAT_LOCALE } from '@/lib/i18n/config';
+import { formatNumber } from '@/lib/format';
+import type { MessageKey } from '@/lib/i18n/messages';
+import type { Locale } from '@/lib/i18n/config';
 
-export const metadata = { title: 'Settings' };
+export async function generateMetadata() {
+  return { title: makeT(await getLocale())('st.title') };
+}
 
-/** Plan dates are calendar days in UTC (the day on the invoice), so show them the same way for everyone. */
-const planDate = (d: Date | null) =>
-  d ? new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' }).format(d) : '';
+/** Plan dates are calendar days in UTC (the day on the invoice), so everyone sees the same day. Only the wording follows the language. */
+const planDate = (d: Date | null, locale: Locale) =>
+  d ? new Intl.DateTimeFormat(FORMAT_LOCALE[locale], { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' }).format(d) : '';
 export const dynamic = 'force-dynamic';
 
 export default async function SettingsPage() {
   const auth = await getAuth();
   if (!auth) redirect('/login');
+  const locale = await getLocale();
+  const t = makeT(locale);
 
   const [subscription, effective] = await Promise.all([getSubscription(auth.organizationId), getEffectiveSubscription(auth.organizationId)]);
   const supportEmail = process.env.SUPPORT_EMAIL;
@@ -30,7 +39,7 @@ export default async function SettingsPage() {
 
   return (
     <div className="mx-auto max-w-3xl">
-      <h1 className="text-xl font-semibold tracking-tight">Settings</h1>
+      <h1 className="text-xl font-semibold tracking-tight">{t('st.title')}</h1>
       <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
         {auth.organizationName} · {auth.email}
       </p>
@@ -49,26 +58,32 @@ export default async function SettingsPage() {
       <div className="mt-5 grid gap-5">
         {subscription && effective && (
           <Card className="p-5">
-            <h2 className="text-sm font-semibold">Plan</h2>
+            <h2 className="text-sm font-semibold">{t('st.plan')}</h2>
             <p className="mt-2 text-sm">
-              <span className="font-medium">{effective.plan.name}</span>
+              <span className="font-medium">{t(`land.plan.${effective.plan.id}.name` as MessageKey)}</span>
               {' · '}
-              {effective.receiptQuota.toLocaleString('en-GB')} receipts a month
+              {t('st.quota', { n: formatNumber(effective.receiptQuota, locale) })}
             </p>
             {effective.plan.id !== 'free' && subscription.currentPeriodEnd && (
               <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
-                Active until {planDate(subscription.currentPeriodEnd)}
-                {effective.daysLeft !== null && effective.daysLeft <= 30 ? ` (${effective.daysLeft} day${effective.daysLeft === 1 ? '' : 's'} left)` : ''}
+                {t('st.activeUntil', { date: planDate(subscription.currentPeriodEnd, locale) })}
+                {effective.daysLeft !== null && effective.daysLeft <= 30
+                  ? effective.daysLeft === 1
+                    ? t('st.daysLeftOne')
+                    : t('st.daysLeftMany', { n: effective.daysLeft })
+                  : ''}
               </p>
             )}
             {effective.expired && (
               <p className="mt-1 text-sm" style={{ color: 'var(--warn)' }}>
-                Your {subscription.plan} plan ended on {planDate(subscription.currentPeriodEnd)}. You keep all your data and the Free limit applies until you renew.
+                {t('st.expired', { plan: t(`land.plan.${subscription.plan}.name` as MessageKey), date: planDate(subscription.currentPeriodEnd, locale) })}
               </p>
             )}
             {supportEmail && (
               <p className="mt-3 text-xs" style={{ color: 'var(--text-subtle)' }}>
-                To upgrade or renew, email <a className="link" href={`mailto:${supportEmail}`}>{supportEmail}</a>. Payment is by bank transfer against an invoice.
+                {t('st.upgradePre')}
+                <a className="link" href={`mailto:${supportEmail}`}>{supportEmail}</a>
+                {t('st.upgradePost')}
               </p>
             )}
           </Card>
