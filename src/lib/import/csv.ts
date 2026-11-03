@@ -13,6 +13,7 @@
 import Papa from 'papaparse';
 import crypto from 'node:crypto';
 import { parseAmount } from '../extraction/parse-text';
+import { isThreeDecimalCurrency, valuesLookThreeDecimal } from '../currency';
 import { normalizeDescription, normalizeMerchant, inferPaymentMethod, extractReference } from '../matching/normalize';
 
 export type TargetField = 'date' | 'description' | 'amount' | 'debit' | 'credit' | 'currency' | 'reference' | 'ignore';
@@ -46,6 +47,8 @@ export interface CsvPreview {
   totalRows: number;
   /** Dates were ambiguous (e.g. 01/02/2026); the UI asks the user which order to use. */
   dateOrderAmbiguous: boolean;
+  /** Amounts are written with three decimals ("47,850"), as in Tunisian dinars. The UI checks the currency. */
+  amountsLookThreeDecimal: boolean;
 }
 
 /** Header aliases, lower-cased and punctuation-stripped. */
@@ -71,6 +74,9 @@ function canonical(header: string): string {
   return header
     .replace(/^﻿/, '')
     .toLowerCase()
+    // Fold accents first, so "Débit" reads "debit" and not "dbit" ("Crédit", "Libellé", "Opération").
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
     .replace(/[_\-.]+/g, ' ')
     .replace(/[^a-z0-9 ]/g, '')
     .replace(/\s+/g, ' ')
@@ -79,6 +85,8 @@ function canonical(header: string): string {
 
 function scoreHeader(header: string, field: Exclude<TargetField, 'ignore'>): number {
   const c = canonical(header);
+  // "Montant Débit" is a debit column, not the single amount column.
+  if (field === 'amount' && /(debit|credit|soll|haben)/.test(c)) return 0;
   const aliases = HEADER_ALIASES[field];
   if (aliases.includes(c)) return 100;
   let best = 0;
@@ -222,7 +230,7 @@ function fingerprint(orgScopedParts: string[]): string {
 export function previewCsv(content: string): CsvPreview {
   const parsed = Papa.parse<string[]>(content.trim(), { skipEmptyLines: 'greedy' });
   const rows = (parsed.data as string[][]).filter((r) => r.some((c) => (c ?? '').trim()));
-  if (!rows.length) return { headers: [], sampleRows: [], suggestedMapping: {}, totalRows: 0, dateOrderAmbiguous: false };
+  if (!rows.length) return { headers: [], sampleRows: [], suggestedMapping: {}, totalRows: 0, dateOrderAmbiguous: false, amountsLookThreeDecimal: false };
 
   const headers = rows[0].map((h, i) => (h ?? '').trim() || `Column ${i + 1}`);
   const body = rows.slice(1);
@@ -233,7 +241,13 @@ export function previewCsv(content: string): CsvPreview {
   const dateIdx = dateCol ? headers.indexOf(dateCol) : -1;
   const dateOrderAmbiguous = dateIdx >= 0 ? detectDateAmbiguity(body.slice(0, 50).map((r) => r[dateIdx] ?? '')) : false;
 
-  return { headers, sampleRows, suggestedMapping, totalRows: body.length, dateOrderAmbiguous };
+  const amountIdx = (['amount', 'debit', 'credit'] as const)
+    .map((f) => Object.keys(suggestedMapping).find((k) => suggestedMapping[k] === f))
+    .filter((k): k is string => Boolean(k))
+    .map((k) => headers.indexOf(k));
+  const amountsLookThreeDecimal = valuesLookThreeDecimal(body.slice(0, 50).flatMap((r) => amountIdx.map((i) => r[i] ?? '')));
+
+  return { headers, sampleRows, suggestedMapping, totalRows: body.length, dateOrderAmbiguous, amountsLookThreeDecimal };
 }
 
 export interface ParseOptions {
@@ -287,14 +301,18 @@ export function parseRows(content: string, options: ParseOptions): { rows: Parse
       return;
     }
 
+    // A dinar-type currency (this row's own, or the default) means "54.600" is 54.6.
+    const currency = (cell(iCurrency) || defaultCurrency).toUpperCase().slice(0, 3);
+    const money = { threeDecimals: isThreeDecimalCurrency(currency) };
+
     let amount: number | null = null;
     if (iAmount >= 0 && cell(iAmount)) {
-      amount = parseAmount(cell(iAmount));
+      amount = parseAmount(cell(iAmount), money);
       // A bare "1.234" in a European file is a thousands separator, not a decimal.
       if (amount != null && options.invertAmounts) amount = -amount;
     } else {
-      const debit = iDebit >= 0 ? parseAmount(cell(iDebit)) : null;
-      const credit = iCredit >= 0 ? parseAmount(cell(iCredit)) : null;
+      const debit = iDebit >= 0 ? parseAmount(cell(iDebit), money) : null;
+      const credit = iCredit >= 0 ? parseAmount(cell(iCredit), money) : null;
       if (debit != null && debit !== 0) amount = -Math.abs(debit);
       else if (credit != null && credit !== 0) amount = Math.abs(credit);
     }
@@ -309,7 +327,6 @@ export function parseRows(content: string, options: ParseOptions): { rows: Parse
     }
 
     const descriptionRaw = cell(iDesc) || '(no description)';
-    const currency = (cell(iCurrency) || defaultCurrency).toUpperCase().slice(0, 3);
     const reference = cell(iReference) || extractReference(descriptionRaw);
 
     const fp = fingerprint([

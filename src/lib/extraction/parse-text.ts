@@ -10,6 +10,7 @@
  * labelled "TOTAL TTC" line scores higher than the largest number on the page.
  */
 import type { ExtractedFields, ExtractedLineItem, FieldConfidence } from '../ai/types';
+import { isThreeDecimalCurrency } from '../currency';
 
 export interface ParseResult {
   fields: ExtractedFields;
@@ -28,6 +29,11 @@ const CURRENCY_SYMBOLS: Record<string, string> = {
 };
 
 const CURRENCY_CODES = ['EUR', 'USD', 'GBP', 'CHF', 'SEK', 'NOK', 'DKK', 'PLN', 'TND', 'MAD', 'CAD', 'AUD', 'JPY', 'INR', 'TRY', 'NGN', 'ZAR'];
+/**
+ * More codes, matched in capitals only: some are also ordinary words ("sar", "kes") and a
+ * merchant called "Sar Restaurant" must not be read as Saudi riyals.
+ */
+const CAPITALS_ONLY_CODES = ['AED', 'SAR', 'QAR', 'KWD', 'BHD', 'OMR', 'JOD', 'LYD', 'EGP', 'DZD', 'KES', 'GHS'];
 
 const MONTHS: Record<string, number> = {
   jan: 1, january: 1, janvier: 1, januar: 1, enero: 1, gennaio: 1,
@@ -46,10 +52,16 @@ const MONTHS: Record<string, number> = {
 
 const TOTAL_LABELS = [
   'total ttc', 'grand total', 'total amount', 'amount due', 'amount paid', 'balance due',
-  'total due', 'montant total', 'total a payer', 'gesamtbetrag', 'gesamt', 'summe',
-  'importe total', 'totale', 'total', 'montant', 'to pay', 'paid',
+  'total due', 'montant total', 'montant ttc', 'net a payer', 'total general', 'total a payer',
+  'gesamtbetrag', 'gesamt', 'summe', 'importe total', 'totale', 'total', 'montant', 'to pay', 'paid',
+  // Arabic "total amount" and "total", as printed on many Tunisian receipts
+  'المبلغ الجملي', 'المجموع',
 ];
-const SUBTOTAL_LABELS = ['subtotal', 'sub total', 'sous-total', 'sous total', 'total ht', 'net amount', 'nettobetrag', 'zwischensumme', 'imponibile', 'base imponible'];
+const SUBTOTAL_LABELS = ['subtotal', 'sub total', 'sous-total', 'sous total', 'total ht', 'montant ht', 'net amount', 'nettobetrag', 'zwischensumme', 'imponibile', 'base imponible'];
+/** A stamp duty some countries add to invoices (Tunisia: "timbre fiscal", 1 DT). It is not VAT. */
+const STAMP_LABELS = ['timbre fiscal', 'timbre'];
+
+
 const TAX_LABELS = ['vat', 'tva', 'mwst', 'ust', 'iva', 'sales tax', 'tax', 'taxe', 'impuesto', 'btw'];
 
 /** Strip accents so label matching works across languages. */
@@ -61,9 +73,16 @@ function fold(s: string): string {
  * Parse a number written in either decimal convention.
  * "1.234,56" (EU) and "1,234.56" (US/UK) both mean 1234.56.
  */
-export function parseAmount(raw: string): number | null {
+export function parseAmount(raw: string, options: { threeDecimals?: boolean } = {}): number | null {
   const cleaned = raw.replace(/[^\d.,-]/g, '').trim();
   if (!cleaned || !/\d/.test(cleaned)) return null;
+
+  // In a three-decimal currency (Tunisian dinar and a few others) one separator followed by
+  // exactly three digits is the decimal point, in either convention: "47,850" and "47.850" are 47.85.
+  if (options.threeDecimals) {
+    const m = cleaned.match(/^(-?\d+)[.,](\d{3})$/);
+    if (m) return Number.parseFloat(`${m[1]}.${m[2]}`);
+  }
 
   const lastComma = cleaned.lastIndexOf(',');
   const lastDot = cleaned.lastIndexOf('.');
@@ -105,6 +124,13 @@ export function parseDate(text: string, currencyHint?: string | null): DateGuess
   if (iso) {
     const g = buildDate(+iso[1], +iso[2], +iso[3]);
     if (g) return { iso: g, confidence: 0.99 };
+  }
+
+  // Year first with slashes or dots, e.g. 2026/10/09 (common on Arabic-language receipts).
+  const yearFirst = folded.match(/\b(\d{4})[\/.](\d{1,2})[\/.](\d{1,2})\b/);
+  if (yearFirst) {
+    const g = buildDate(+yearFirst[1], +yearFirst[2], +yearFirst[3]);
+    if (g) return { iso: g, confidence: 0.97 };
   }
 
   // "28 Sep 2026" / "28 septembre 2026"
@@ -165,21 +191,42 @@ function detectCurrency(text: string): { code: string; confidence: number } | nu
   for (const code of CURRENCY_CODES) {
     if (new RegExp(`\\b${code}\\b`, 'i').test(text)) return { code, confidence: 0.96 };
   }
+  for (const code of CAPITALS_ONLY_CODES) {
+    if (new RegExp(`\\b${code}\\b`).test(text)) return { code, confidence: 0.96 };
+  }
   for (const [symbol, code] of Object.entries(CURRENCY_SYMBOLS)) {
     if (text.includes(symbol)) return { code, confidence: 0.9 };
   }
+  // "DT" is how Tunisian receipts write the dinar. Require a digit just before it, so the
+  // letters in other words or codes ("DT-4521") are not mistaken for a currency.
+  if (/\d\s*(?:DT|DTN)\b/.test(text) || /\bdinars?\s+tunisiens?\b/i.test(text)) return { code: 'TND', confidence: 0.9 };
   return null;
 }
 
+/**
+ * When no currency is printed, decide from the page itself whether amounts have three decimals:
+ * at least two numbers like "40,210" and none like "40,21" (percentages such as "19,00 %" are
+ * ignored). A page that mixes both is left alone.
+ */
+function looksThreeDecimal(text: string): boolean {
+  const three = text.match(/(?<![\d.,])\d{1,6}[.,]\d{3}(?![\d.,])/g) ?? [];
+  const two = text.match(/(?<![\d.,])\d{1,6}[.,]\d{2}(?![\d.,]|\s*%)/g) ?? [];
+  return three.length >= 2 && two.length === 0;
+}
+
 /** All numbers on a line that look like money. */
-function amountsOnLine(line: string): number[] {
+function amountsOnLine(line: string, options: { threeDecimals?: boolean } = {}): number[] {
   const matches = line.match(/-?[\d][\d.,\s]*\d|\d/g) ?? [];
   return matches
-    .map((m) => parseAmount(m))
+    .map((m) => parseAmount(m, options))
     .filter((n): n is number => n != null && Math.abs(n) < 10_000_000);
 }
 
-function findLabelled(lines: string[], labels: string[]): { value: number; line: string; exact: boolean } | null {
+function findLabelled(
+  lines: string[],
+  labels: string[],
+  options: { threeDecimals?: boolean } = {},
+): { value: number; line: string; exact: boolean } | null {
   // Longest labels first so "total ttc" wins over "total".
   const ordered = [...labels].sort((a, b) => b.length - a.length);
   let fallback: { value: number; line: string; exact: boolean } | null = null;
@@ -189,10 +236,10 @@ function findLabelled(lines: string[], labels: string[]): { value: number; line:
     for (const label of ordered) {
       if (!folded.includes(label)) continue;
       // Ignore lines where the label is part of a longer word.
-      const nums = amountsOnLine(lines[i]);
+      const nums = amountsOnLine(lines[i], options);
       if (nums.length === 0) {
         // Value may sit on the next line (common in two-column layouts).
-        const next = lines[i + 1] ? amountsOnLine(lines[i + 1]) : [];
+        const next = lines[i + 1] ? amountsOnLine(lines[i + 1], options) : [];
         if (next.length) {
           const cand = { value: next[next.length - 1], line: lines[i], exact: false };
           if (!fallback) fallback = cand;
@@ -253,7 +300,7 @@ function findPaymentMethod(text: string): { value: string; confidence: number } 
   return null;
 }
 
-function findItems(lines: string[]): ExtractedLineItem[] {
+function findItems(lines: string[], options: { threeDecimals?: boolean } = {}): ExtractedLineItem[] {
   const items: ExtractedLineItem[] = [];
   const labelLine = new RegExp(`\\b(${[...TOTAL_LABELS, ...SUBTOTAL_LABELS, ...TAX_LABELS].join('|')})\\b`, 'i');
 
@@ -263,7 +310,7 @@ function findItems(lines: string[]): ExtractedLineItem[] {
     const m = line.match(/^\s*(\d{1,3})\s*[xX*]\s*(.+?)\s{2,}([\d.,]+)\s*$/);
     if (m) {
       const qty = +m[1];
-      const total = parseAmount(m[3]);
+      const total = parseAmount(m[3], options);
       items.push({
         description: m[2].trim(),
         quantity: qty,
@@ -273,7 +320,7 @@ function findItems(lines: string[]): ExtractedLineItem[] {
     }
     const simple = line.match(/^\s*(.{2,40}?)\s{2,}([\d.,]+)\s*$/);
     if (simple && /[a-zA-Z]{2}/.test(simple[1])) {
-      const price = parseAmount(simple[2]);
+      const price = parseAmount(simple[2], options);
       if (price != null && price > 0) {
         items.push({ description: simple[1].trim(), quantity: 1, unitPrice: price });
       }
@@ -298,9 +345,15 @@ export function parseReceiptText(text: string): ParseResult {
   const merchant = findMerchant(lines);
   if (merchant) confidence.merchant = merchant.confidence;
 
-  const totalHit = findLabelled(lines, TOTAL_LABELS);
-  const subtotalHit = findLabelled(lines, SUBTOTAL_LABELS);
-  const taxHit = findLabelled(lines, TAX_LABELS);
+  // Three-decimal currencies: from the printed currency, or failing that from the page's own numbers.
+  const threeDecimals = currency ? isThreeDecimalCurrency(currency.code) : looksThreeDecimal(joined);
+  const opts = { threeDecimals };
+
+  const totalHit = findLabelled(lines, TOTAL_LABELS, opts);
+  const subtotalHit = findLabelled(lines, SUBTOTAL_LABELS, opts);
+  const taxHit = findLabelled(lines, TAX_LABELS, opts);
+  const stampHit = findLabelled(lines, STAMP_LABELS, opts);
+  const stamp = stampHit ? Math.abs(stampHit.value) : 0;
 
   let total: number | null = null;
   if (totalHit) {
@@ -308,7 +361,7 @@ export function parseReceiptText(text: string): ParseResult {
     confidence.total = totalHit.exact ? 0.98 : 0.86;
   } else {
     // No labelled total: fall back to the largest money-looking number, low confidence.
-    const all = lines.flatMap(amountsOnLine).filter((n) => n > 0);
+    const all = lines.flatMap((l) => amountsOnLine(l, opts)).filter((n) => n > 0);
     if (all.length) {
       total = Math.max(...all);
       confidence.total = 0.45;
@@ -321,9 +374,9 @@ export function parseReceiptText(text: string): ParseResult {
   let tax = taxHit ? Math.abs(taxHit.value) : null;
   if (taxHit) confidence.tax = taxHit.exact ? 0.9 : 0.72;
 
-  // Arithmetic cross-check: subtotal + tax should equal total. Agreement raises confidence.
+  // Arithmetic cross-check: subtotal + tax (+ stamp duty, where one is printed) should equal total.
   if (total != null && subtotal != null && tax != null) {
-    if (Math.abs(subtotal + tax - total) < 0.02) {
+    if (Math.abs(subtotal + tax + stamp - total) < 0.02) {
       confidence.total = Math.max(confidence.total ?? 0, 0.99);
       confidence.subtotal = Math.max(confidence.subtotal ?? 0, 0.97);
       confidence.tax = Math.max(confidence.tax ?? 0, 0.97);
@@ -331,7 +384,8 @@ export function parseReceiptText(text: string): ParseResult {
       confidence.tax = Math.min(confidence.tax ?? 1, 0.55);
     }
   } else if (total != null && subtotal != null && tax == null) {
-    const derived = Math.round((total - subtotal) * 100) / 100;
+    // What is left after the subtotal, minus any stamp duty: that is the tax.
+    const derived = Math.round((total - subtotal - stamp) * 100) / 100;
     if (derived > 0 && derived < total) {
       tax = derived;
       confidence.tax = 0.6; // inferred, not read
@@ -344,7 +398,7 @@ export function parseReceiptText(text: string): ParseResult {
   const payment = findPaymentMethod(joined);
   if (payment) confidence.paymentMethod = payment.confidence;
 
-  const items = findItems(lines);
+  const items = findItems(lines, opts);
   if (items.length) confidence.items = 0.7;
 
   const fields: ExtractedFields = {

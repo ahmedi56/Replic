@@ -13,6 +13,7 @@
     "db:push": "tsx --env-file-if-exists=.env scripts/migrate.ts",
     "backup": "tsx --conditions=react-server --tsconfig tsconfig.json --env-file-if-exists=.env scripts/backup.ts",
     "plan": "tsx --conditions=react-server --tsconfig tsconfig.json --env-file-if-exists=.env scripts/plan.ts",
+    "demo:files": "tsx scripts/demo-files.ts",
     "setup": "tsx --env-file-if-exists=.env scripts/migrate.ts",
     "test": "vitest run",
     "test:watch": "vitest",

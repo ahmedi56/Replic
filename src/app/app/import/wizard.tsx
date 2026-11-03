@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Alert, Card, Spinner, useToast } from '@/components/ui';
 import type { TargetField, ColumnMapping } from '@/lib/import/csv';
+import { isThreeDecimalCurrency } from '@/lib/currency';
 
 /**
  * Three steps: choose a file, confirm the mapping, commit.
@@ -31,6 +32,7 @@ interface Preview {
   suggestedMapping: ColumnMapping;
   totalRows: number;
   dateOrderAmbiguous: boolean;
+  amountsLookThreeDecimal: boolean;
   filename: string;
   content: string;
 }
@@ -350,6 +352,12 @@ export function ImportWizard({ accounts }: { accounts: Array<{ id: string; name:
             <p className="mt-1.5 text-xs" style={{ color: 'var(--text-subtle)' }}>
               Used only for rows without their own currency column.
             </p>
+            {preview.amountsLookThreeDecimal && !isThreeDecimalCurrency(currency) && (
+              <p className="mt-2 text-xs" style={{ color: 'var(--warn, #b45309)' }} role="note">
+                These amounts have three decimals (like 47,850), as dinar amounts do. If this statement is in Tunisian
+                dinars, enter TND, otherwise your receipts in TND will not match it.
+              </p>
+            )}
           </div>
         </div>
 
