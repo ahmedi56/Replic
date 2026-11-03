@@ -3,9 +3,11 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Spinner, useToast } from '@/components/ui';
+import { useT } from '@/lib/i18n/client';
 
 /** Re-runs matching across the workspace — useful after editing fields or weights. */
-export function RematchButton({ label = 'Re-run matching' }: { label?: string }) {
+export function RematchButton({ label }: { label?: string }) {
+  const t = useT();
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const toast = useToast();
@@ -16,13 +18,13 @@ export function RematchButton({ label = 'Re-run matching' }: { label?: string })
       const res = await fetch('/api/matches/run', { method: 'POST' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toast.show(data.error ?? 'Could not re-run matching', 'danger');
+        toast.show(data.error ?? t('rematch.failed'), 'danger');
         return;
       }
-      toast.show(`${data.auto} matched · ${data.review} to review · ${data.unmatched} unmatched`);
+      toast.show(t('rematch.result', { auto: data.auto, review: data.review, unmatched: data.unmatched }));
       router.refresh();
     } catch {
-      toast.show('Could not reach the server', 'danger');
+      toast.show(t('rematch.offline'), 'danger');
     } finally {
       setBusy(false);
     }
@@ -32,7 +34,7 @@ export function RematchButton({ label = 'Re-run matching' }: { label?: string })
     <>
       <button onClick={run} className="btn btn-ghost" disabled={busy}>
         {busy ? <Spinner /> : null}
-        {label}
+        {label ?? t('rematch.label')}
       </button>
       {toast.node}
     </>

@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useT } from '@/lib/i18n/client';
+import type { MessageKey } from '@/lib/i18n/messages';
 
 /**
  * The hero visual: a reconciliation run, played once.
@@ -9,20 +11,21 @@ import { useEffect, useRef, useState } from 'react';
  * outcome — most matched, a few to review, a few with no counterpart — rather than a
  * flattering 100%. Honours prefers-reduced-motion by jumping straight to the result.
  */
-const STAGES = [
-  { label: '100 receipts uploaded', detail: 'JPG, PNG and PDF' },
-  { label: 'Extracting', detail: 'merchant · date · total · VAT' },
-  { label: '100 receipts processed', detail: 'each field scored for confidence' },
-  { label: 'Matching', detail: 'amount · date · merchant · currency' },
+const STAGES: Array<{ label: MessageKey; detail: MessageKey }> = [
+  { label: 'hero.s1', detail: 'hero.s1d' },
+  { label: 'hero.s2', detail: 'hero.s2d' },
+  { label: 'hero.s3', detail: 'hero.s3d' },
+  { label: 'hero.s4', detail: 'hero.s4d' },
 ];
 
-const OUTCOME = [
-  { value: 91, label: 'automatically matched', tone: 'var(--accent)' },
-  { value: 6, label: 'need review', tone: 'var(--warn)' },
-  { value: 3, label: 'unmatched', tone: 'var(--text-subtle)' },
+const OUTCOME: Array<{ value: number; label: MessageKey; tone: string }> = [
+  { value: 91, label: 'hero.o1', tone: 'var(--accent)' },
+  { value: 6, label: 'hero.o2', tone: 'var(--warn)' },
+  { value: 3, label: 'hero.o3', tone: 'var(--text-subtle)' },
 ];
 
 export function HeroDemo() {
+  const t = useT();
   const [step, setStep] = useState(0);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
 
@@ -40,7 +43,7 @@ export function HeroDemo() {
   }, []);
 
   return (
-    <div className="card overflow-hidden p-1.5 shadow-pop" aria-label="A reconciliation run: 91 matched, 6 need review, 3 unmatched">
+    <div className="card overflow-hidden p-1.5 shadow-pop" aria-label={t('hero.aria')}>
       <div className="rounded-lg px-5 py-6 sm:px-7 sm:py-8" style={{ background: 'var(--surface-sunken)' }}>
         <ol className="grid gap-3">
           {STAGES.map((stage, i) => {
@@ -57,9 +60,9 @@ export function HeroDemo() {
                   {active ? '✓' : i + 1}
                 </span>
                 <span className="min-w-0">
-                  <span className="block truncate text-sm font-medium">{stage.label}</span>
+                  <span className="block truncate text-sm font-medium">{t(stage.label)}</span>
                   <span className="block truncate text-xs" style={{ color: 'var(--text-subtle)' }}>
-                    {stage.detail}
+                    {t(stage.detail)}
                   </span>
                 </span>
               </li>
@@ -77,12 +80,12 @@ export function HeroDemo() {
                 {row.value}
               </span>
               <span className="text-sm" style={{ color: 'var(--text-muted)' }}>
-                {row.label}
+                {t(row.label)}
               </span>
             </div>
           ))}
           <p className="mt-3 text-xs" style={{ color: 'var(--text-subtle)' }}>
-            You review six. Reclip did the other ninety-four.
+            {t('hero.note')}
           </p>
         </div>
       </div>

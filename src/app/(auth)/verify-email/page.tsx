@@ -1,8 +1,11 @@
 import { redirect } from 'next/navigation';
 import { getAuth } from '@/lib/auth/session';
 import { VerifyPanel } from './verify-panel';
+import { getLocale, makeT } from '@/lib/i18n/server';
 
-export const metadata = { title: 'Confirm your email' };
+export async function generateMetadata() {
+  return { title: makeT(await getLocale())('meta.confirmEmail') };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function VerifyEmailPage({ searchParams }: { searchParams: Promise<{ token?: string }> }) {

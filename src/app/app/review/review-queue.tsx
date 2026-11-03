@@ -5,6 +5,9 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Card, ConfidenceBadge, Spinner, formatDate, formatMoney, useToast } from '@/components/ui';
 import type { StoredBreakdown } from '@/lib/matching/score';
+import { useLocale, useT } from '@/lib/i18n/client';
+import { translateReason } from '@/lib/i18n/reasons';
+import type { MessageKey } from '@/lib/i18n/messages';
 
 /**
  * The review queue.
@@ -35,15 +38,17 @@ export interface ReviewRow {
   transactionCurrency: string;
 }
 
-const SIGNAL_LABEL: Record<string, string> = {
-  amount: 'Amount',
-  date: 'Date',
-  merchant: 'Merchant',
-  currency: 'Currency',
-  paymentMethod: 'Payment method',
+const SIGNAL_LABEL: Record<string, MessageKey> = {
+  amount: 'sig.amount',
+  date: 'sig.date',
+  merchant: 'sig.merchant',
+  currency: 'sig.currency',
+  paymentMethod: 'sig.paymentMethod',
 };
 
 export function ReviewQueue({ initial, total }: { initial: ReviewRow[]; total: number }) {
+  const t = useT();
+  const locale = useLocale();
   const router = useRouter();
   const [rows, setRows] = useState(initial);
   const [pending, setPending] = useState<string | null>(null);
@@ -65,14 +70,14 @@ export function ReviewQueue({ initial, total }: { initial: ReviewRow[]; total: n
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         setRows(snapshot); // put it back — the decision didn't stick
-        toast.show(data.error ?? 'Could not save that decision', 'danger');
+        toast.show(data.error ?? t('rev.err.save'), 'danger');
         return;
       }
-      toast.show(action === 'confirm' ? 'Match confirmed' : 'Match rejected');
+      toast.show(action === 'confirm' ? t('rev.confirmed') : t('rev.rejected'));
       router.refresh();
     } catch {
       setRows(snapshot);
-      toast.show('Could not reach the server', 'danger');
+      toast.show(t('common.offline'), 'danger');
     } finally {
       setPending(null);
     }
@@ -81,16 +86,16 @@ export function ReviewQueue({ initial, total }: { initial: ReviewRow[]; total: n
   if (rows.length === 0) {
     return (
       <Card className="px-6 py-14 text-center">
-        <p className="text-sm font-semibold">All caught up</p>
+        <p className="text-sm font-semibold">{t('rev.caughtUp')}</p>
         <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
-          You reviewed {decided} match{decided === 1 ? '' : 'es'}.
+          {decided === 1 ? t('rev.reviewedOne') : t('rev.reviewedMany', { n: decided })}
         </p>
         <div className="mt-5 flex justify-center gap-2">
           <Link href="/app" className="btn btn-ghost">
-            Back to dashboard
+            {t('rev.backDash')}
           </Link>
           <Link href="/app/matches" className="btn btn-accent">
-            See matched
+            {t('rev.seeMatched')}
           </Link>
         </div>
         {toast.node}
@@ -101,7 +106,8 @@ export function ReviewQueue({ initial, total }: { initial: ReviewRow[]; total: n
   return (
     <div className="grid gap-4">
       <p className="text-xs" style={{ color: 'var(--text-subtle)' }}>
-        <span className="num">{rows.length}</span> remaining{decided > 0 && <> · {decided} decided this session</>}
+        {t('rev.remaining', { n: rows.length })}
+        {decided > 0 && <> · {t('rev.decided', { n: decided })}</>}
       </p>
 
       {rows.map((row) => {
@@ -114,37 +120,37 @@ export function ReviewQueue({ initial, total }: { initial: ReviewRow[]; total: n
             <div className="grid sm:grid-cols-2">
               <div className="border-b p-5 sm:border-b-0 sm:border-r">
                 <p className="text-[0.68rem] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-subtle)' }}>
-                  Receipt
+                  {t('rev.receipt')}
                 </p>
                 <Link href={`/app/receipts/${row.receiptId}`} className="mt-2 block truncate text-base font-semibold hover:underline">
                   {row.merchantRaw ?? row.receiptName}
                 </Link>
                 <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
-                  {formatDate(row.receiptDate)}
+                  {formatDate(row.receiptDate, locale)}
                 </p>
                 <p className="num mt-3 text-xl font-semibold tracking-tight">
-                  {formatMoney(row.receiptTotal, row.receiptCurrency ?? 'EUR')}
+                  {formatMoney(row.receiptTotal, row.receiptCurrency ?? 'EUR', { locale })}
                 </p>
                 {row.receiptConfidence != null && row.receiptConfidence < 0.7 && (
                   <p className="mt-2 text-xs" style={{ color: 'var(--warn)' }}>
-                    Extraction confidence {Math.round(row.receiptConfidence * 100)}%. Check the fields
+                    {t('rev.extractConf', { pct: Math.round(row.receiptConfidence * 100) })}
                   </p>
                 )}
               </div>
 
               <div className="p-5">
                 <p className="text-[0.68rem] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-subtle)' }}>
-                  Transaction
+                  {t('rev.transaction')}
                 </p>
                 <p className="mt-2 truncate text-base font-semibold" title={row.descriptionRaw}>
                   {row.descriptionRaw}
                 </p>
                 <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
-                  {formatDate(row.transactionDate)}
+                  {formatDate(row.transactionDate, locale)}
                 </p>
                 <p className="num mt-3 text-xl font-semibold tracking-tight" style={{ color: row.amount < 0 ? 'var(--text)' : 'var(--accent-ink)' }}>
                   {row.amount < 0 ? '−' : '+'}
-                  {formatMoney(row.amount, row.transactionCurrency)}
+                  {formatMoney(row.amount, row.transactionCurrency, { locale })}
                 </p>
               </div>
             </div>
@@ -153,11 +159,11 @@ export function ReviewQueue({ initial, total }: { initial: ReviewRow[]; total: n
             <div className="border-t px-5 py-4" style={{ background: 'var(--surface-sunken)' }}>
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-2.5">
-                  <span className="text-sm font-medium">Match confidence</span>
+                  <span className="text-sm font-medium">{t('rev.matchConf')}</span>
                   <ConfidenceBadge value={row.score} />
                   {row.method === 'semantic' && (
                     <span className="text-xs" style={{ color: 'var(--text-subtle)' }}>
-                      merchant resolved semantically
+                      {t('rev.semanticNote')}
                     </span>
                   )}
                 </div>
@@ -175,9 +181,9 @@ export function ReviewQueue({ initial, total }: { initial: ReviewRow[]; total: n
                     </span>
                     <span style={{ color: 'var(--text-muted)' }}>
                       <span className="font-medium" style={{ color: 'var(--text)' }}>
-                        {SIGNAL_LABEL[signal.name] ?? signal.name}:
+                        {SIGNAL_LABEL[signal.name] ? t(SIGNAL_LABEL[signal.name]) : signal.name}:
                       </span>{' '}
-                      {signal.reason}
+                      {translateReason(signal.reason, t)}
                     </span>
                   </li>
                 ))}
@@ -185,20 +191,20 @@ export function ReviewQueue({ initial, total }: { initial: ReviewRow[]; total: n
 
               {row.parsedBreakdown?.veto && (
                 <p className="mt-3 text-xs font-medium" style={{ color: 'var(--warn)' }}>
-                  {row.parsedBreakdown.veto}
+                  {translateReason(row.parsedBreakdown.veto, t)}
                 </p>
               )}
 
               <div className="mt-4 flex flex-wrap gap-2">
                 <button className="btn btn-accent" onClick={() => decide(row.matchId, 'confirm')} disabled={busy}>
                   {busy && <Spinner />}
-                  Confirm match
+                  {t('rev.confirm')}
                 </button>
                 <button className="btn btn-ghost" onClick={() => decide(row.matchId, 'reject')} disabled={busy}>
-                  Reject
+                  {t('rev.reject')}
                 </button>
                 <Link href={`/app/receipts/${row.receiptId}`} className="btn btn-ghost">
-                  Open receipt
+                  {t('rev.openReceipt')}
                 </Link>
               </div>
             </div>

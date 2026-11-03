@@ -4,39 +4,43 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState, type ReactNode } from 'react';
 import { ReclipWordmark } from './brand';
+import { LanguageSwitcher } from './language-switcher';
+import { useT } from '@/lib/i18n/client';
+import type { MessageKey } from '@/lib/i18n/messages';
 
 /**
  * Application chrome: a persistent sidebar on desktop, a slide-over on mobile.
  * The nav is grouped by the reconciliation loop, so the sidebar reads as the workflow.
  */
 
-const NAV: Array<{ group: string; items: Array<{ href: string; label: string; icon: ReactNode }> }> = [
+const NAV: Array<{ group: MessageKey; items: Array<{ href: string; label: MessageKey; icon: ReactNode }> }> = [
   {
-    group: 'Overview',
+    group: 'nav.overview',
     items: [
-      { href: '/app', label: 'Dashboard', icon: <IconGrid /> },
-      { href: '/app/review', label: 'Needs review', icon: <IconFlag /> },
-      { href: '/app/matches', label: 'Matched', icon: <IconCheck /> },
-      { href: '/app/unmatched', label: 'Unmatched', icon: <IconSplit /> },
+      { href: '/app', label: 'nav.dashboard', icon: <IconGrid /> },
+      { href: '/app/review', label: 'nav.review', icon: <IconFlag /> },
+      { href: '/app/matches', label: 'nav.matched', icon: <IconCheck /> },
+      { href: '/app/unmatched', label: 'nav.unmatched', icon: <IconSplit /> },
     ],
   },
   {
-    group: 'Data',
+    group: 'nav.data',
     items: [
-      { href: '/app/receipts', label: 'Receipts', icon: <IconReceipt /> },
-      { href: '/app/transactions', label: 'Transactions', icon: <IconBank /> },
+      { href: '/app/receipts', label: 'nav.receipts', icon: <IconReceipt /> },
+      { href: '/app/transactions', label: 'nav.transactions', icon: <IconBank /> },
     ],
   },
   {
-    group: 'Add',
+    group: 'nav.add',
     items: [
-      { href: '/app/upload', label: 'Upload receipts', icon: <IconUpload /> },
-      { href: '/app/import', label: 'Import bank CSV', icon: <IconCsv /> },
+      { href: '/app/upload', label: 'nav.upload', icon: <IconUpload /> },
+      { href: '/app/import', label: 'nav.import', icon: <IconCsv /> },
     ],
   },
 ];
 
 export function AppShell({ children, userName, organizationName }: { children: ReactNode; userName: string; organizationName: string }) {
+  const t = useT();
   const pathname = usePathname();
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -80,11 +84,11 @@ export function AppShell({ children, userName, organizationName }: { children: R
   }
 
   const nav = (
-    <nav className="grid gap-6" aria-label="Main">
+    <nav className="grid gap-6" aria-label={t('common.mainNav')}>
       {NAV.map((section) => (
         <div key={section.group}>
           <p className="mb-2 px-3 text-[0.68rem] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-subtle)' }}>
-            {section.group}
+            {t(section.group)}
           </p>
           <ul className="grid gap-0.5">
             {section.items.map((item) => {
@@ -102,7 +106,7 @@ export function AppShell({ children, userName, organizationName }: { children: R
                     }}
                   >
                     <span className="shrink-0 opacity-80">{item.icon}</span>
-                    {item.label}
+                    {t(item.label)}
                   </Link>
                 </li>
               );
@@ -128,10 +132,10 @@ export function AppShell({ children, userName, organizationName }: { children: R
           </p>
           <div className="mt-3 flex items-center gap-2">
             <Link href="/app/settings" className="btn btn-ghost flex-1 px-2 py-1.5 text-xs">
-              Settings
+              {t('common.settings')}
             </Link>
             <button onClick={signOut} className="btn btn-ghost px-2 py-1.5 text-xs">
-              Sign out
+              {t('common.signOut')}
             </button>
           </div>
         </div>
@@ -142,7 +146,7 @@ export function AppShell({ children, userName, organizationName }: { children: R
         <button
           onClick={() => setMobileOpen(true)}
           className="btn btn-ghost px-2 py-1.5"
-          aria-label="Open navigation"
+          aria-label={t('common.openNav')}
           aria-expanded={mobileOpen}
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -152,30 +156,31 @@ export function AppShell({ children, userName, organizationName }: { children: R
         <Link href="/app">
           <ReclipWordmark />
         </Link>
-        <button onClick={toggleTheme} className="btn btn-ghost px-2 py-1.5" aria-label="Toggle dark mode">
+        <button onClick={toggleTheme} className="btn btn-ghost px-2 py-1.5" aria-label={t('common.toggleDark')}>
           <IconTheme />
         </button>
       </header>
 
       {mobileOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label="Navigation">
+        <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label={t('common.mainNav')}>
           <div className="absolute inset-0" aria-hidden="true" style={{ background: 'rgb(11 18 32 / 0.5)' }} onClick={() => setMobileOpen(false)} />
           <div className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col border-r px-3 py-5" style={{ background: 'var(--surface)' }}>
             <div className="mb-7 flex items-center justify-between px-3">
               <ReclipWordmark />
-              <button onClick={() => setMobileOpen(false)} className="btn btn-ghost px-2 py-1" aria-label="Close navigation">
+              <button onClick={() => setMobileOpen(false)} className="btn btn-ghost px-2 py-1" aria-label={t('common.closeNav')}>
                 ✕
               </button>
             </div>
             <div className="flex-1 overflow-y-auto">{nav}</div>
             <div className="mt-4 border-t px-3 pt-4">
               <p className="truncate text-sm font-medium">{userName}</p>
+              <LanguageSwitcher className="mt-2" />
               <div className="mt-3 flex gap-2">
                 <Link href="/app/settings" className="btn btn-ghost flex-1 px-2 py-1.5 text-xs">
-                  Settings
+                  {t('common.settings')}
                 </Link>
                 <button onClick={signOut} className="btn btn-ghost px-2 py-1.5 text-xs">
-                  Sign out
+                  {t('common.signOut')}
                 </button>
               </div>
             </div>
@@ -184,10 +189,11 @@ export function AppShell({ children, userName, organizationName }: { children: R
       )}
 
       <div className="flex min-w-0 flex-col">
-        <div className="hidden justify-end border-b px-6 py-2.5 lg:flex" style={{ background: 'var(--surface)' }}>
-          <button onClick={toggleTheme} className="btn btn-ghost px-2 py-1.5 text-xs" aria-label="Toggle dark mode">
+        <div className="hidden items-center justify-end gap-3 border-b px-6 py-2.5 lg:flex" style={{ background: 'var(--surface)' }}>
+          <LanguageSwitcher />
+          <button onClick={toggleTheme} className="btn btn-ghost px-2 py-1.5 text-xs" aria-label={t('common.toggleDark')}>
             <IconTheme />
-            {theme === 'dark' ? 'Light' : 'Dark'}
+            {theme === 'dark' ? t('common.light') : t('common.dark')}
           </button>
         </div>
         <main id="main" className="min-w-0 flex-1 px-4 py-6 sm:px-6 sm:py-8">

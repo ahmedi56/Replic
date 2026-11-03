@@ -1,13 +1,17 @@
 import { UploadDropzone } from './dropzone';
+import { getLocale, makeT } from '@/lib/i18n/server';
 
-export const metadata = { title: 'Upload receipts' };
+export async function generateMetadata() {
+  return { title: makeT(await getLocale())('up.title') };
+}
 
-export default function UploadPage() {
+export default async function UploadPage() {
+  const t = makeT(await getLocale());
   return (
     <div className="mx-auto max-w-3xl">
-      <h1 className="text-xl font-semibold tracking-tight">Upload receipts</h1>
+      <h1 className="text-xl font-semibold tracking-tight">{t('up.title')}</h1>
       <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
-        JPG, PNG, WEBP or PDF. Drop a hundred at once. They process in the background and you can keep working.
+        {t('up.sub')}
       </p>
       <div className="mt-6">
         <UploadDropzone />

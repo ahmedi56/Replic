@@ -5,8 +5,10 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Suspense } from 'react';
 import { Alert, Spinner } from '@/components/ui';
+import { useT } from '@/lib/i18n/client';
 
 function ResetInner() {
+  const t = useT();
   const params = useSearchParams();
   const router = useRouter();
   const token = params.get('token');
@@ -31,7 +33,7 @@ function ResetInner() {
     setBusy(false);
 
     if (!res.ok) {
-      setError(data.error ?? 'Something went wrong.');
+      setError(data.error ?? t('common.somethingWrong'));
       return;
     }
     setNotice(data.message);
@@ -55,7 +57,7 @@ function ResetInner() {
     setBusy(false);
 
     if (!res.ok) {
-      setError(data.error ?? 'Something went wrong.');
+      setError(data.error ?? t('common.somethingWrong'));
       return;
     }
     router.push('/login');
@@ -64,21 +66,21 @@ function ResetInner() {
   if (token) {
     return (
       <div className="card p-7 shadow-card">
-        <h1 className="text-xl font-semibold tracking-tight">Choose a new password</h1>
+        <h1 className="text-xl font-semibold tracking-tight">{t('auth.newPasswordTitle')}</h1>
         <form onSubmit={confirm} className="mt-6 grid gap-4">
           {error && <Alert tone="danger">{error}</Alert>}
           <div>
             <label className="label" htmlFor="password">
-              New password
+              {t('auth.newPassword')}
             </label>
             <input id="password" name="password" type="password" required minLength={10} className="input" autoComplete="new-password" />
             <p className="mt-1.5 text-xs" style={{ color: 'var(--text-subtle)' }}>
-              At least 10 characters. This signs you out everywhere else.
+              {t('auth.newPasswordHint')}
             </p>
           </div>
           <button className="btn btn-primary w-full py-2.5" disabled={busy}>
             {busy && <Spinner />}
-            Set new password
+            {t('auth.setNewPassword')}
           </button>
         </form>
       </div>
@@ -87,9 +89,9 @@ function ResetInner() {
 
   return (
     <div className="card p-7 shadow-card">
-      <h1 className="text-xl font-semibold tracking-tight">Reset your password</h1>
+      <h1 className="text-xl font-semibold tracking-tight">{t('auth.resetTitle')}</h1>
       <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
-        We&apos;ll send a link to your email address.
+        {t('auth.resetSubtitle')}
       </p>
       <form onSubmit={request} className="mt-6 grid gap-4">
         {error && <Alert tone="danger">{error}</Alert>}
@@ -100,25 +102,25 @@ function ResetInner() {
               <>
                 {' '}
                 <Link href={devLink} className="link">
-                  Open the reset link
+                  {t('auth.openResetLink')}
                 </Link>{' '}
-                <span className="text-xs">(shown in development only)</span>
+                <span className="text-xs">{t('auth.devOnly')}</span>
               </>
             )}
           </Alert>
         )}
         <div>
           <label className="label" htmlFor="email">
-            Email
+            {t('common.email')}
           </label>
           <input id="email" name="email" type="email" required className="input" autoComplete="email" />
         </div>
         <button className="btn btn-primary w-full py-2.5" disabled={busy}>
           {busy && <Spinner />}
-          Send reset link
+          {t('auth.sendReset')}
         </button>
         <Link href="/login" className="text-center text-sm" style={{ color: 'var(--text-muted)' }}>
-          Back to sign in
+          {t('auth.backToSignIn')}
         </Link>
       </form>
     </div>

@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation';
 import { Alert, Card, Spinner, useToast } from '@/components/ui';
 import type { TargetField, ColumnMapping } from '@/lib/import/csv';
 import { isThreeDecimalCurrency } from '@/lib/currency';
+import { useT } from '@/lib/i18n/client';
+import type { MessageKey } from '@/lib/i18n/messages';
 
 /**
  * Three steps: choose a file, confirm the mapping, commit.
@@ -15,15 +17,15 @@ import { isThreeDecimalCurrency } from '@/lib/currency';
  * easier to answer while looking at the data than from the header name alone.
  */
 
-const TARGETS: Array<{ value: TargetField; label: string }> = [
-  { value: 'ignore', label: 'Ignore' },
-  { value: 'date', label: 'Date' },
-  { value: 'description', label: 'Description' },
-  { value: 'amount', label: 'Amount (signed)' },
-  { value: 'debit', label: 'Debit (money out)' },
-  { value: 'credit', label: 'Credit (money in)' },
-  { value: 'currency', label: 'Currency' },
-  { value: 'reference', label: 'Reference' },
+const TARGETS: Array<{ value: TargetField; label: MessageKey }> = [
+  { value: 'ignore', label: 'imp.field.ignore' },
+  { value: 'date', label: 'imp.field.date' },
+  { value: 'description', label: 'imp.field.description' },
+  { value: 'amount', label: 'imp.field.amount' },
+  { value: 'debit', label: 'imp.field.debit' },
+  { value: 'credit', label: 'imp.field.credit' },
+  { value: 'currency', label: 'imp.field.currency' },
+  { value: 'reference', label: 'imp.field.reference' },
 ];
 
 interface Preview {
@@ -38,6 +40,7 @@ interface Preview {
 }
 
 export function ImportWizard({ accounts }: { accounts: Array<{ id: string; name: string; currency: string }> }) {
+  const t = useT();
   const router = useRouter();
   const toast = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -46,7 +49,7 @@ export function ImportWizard({ accounts }: { accounts: Array<{ id: string; name:
   const [mapping, setMapping] = useState<ColumnMapping>({});
   const [dateOrder, setDateOrder] = useState<'auto' | 'dmy' | 'mdy'>('auto');
   const [accountId, setAccountId] = useState<string>(accounts[0]?.id ?? '');
-  const [accountName, setAccountName] = useState('Main account');
+  const [accountName, setAccountName] = useState(t('imp.mainAccount'));
   const [currency, setCurrency] = useState('EUR');
   const [invertAmounts, setInvertAmounts] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -64,14 +67,14 @@ export function ImportWizard({ accounts }: { accounts: Array<{ id: string; name:
       const res = await fetch('/api/imports/preview', { method: 'POST', body });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(data.error ?? 'That file could not be read');
+        setError(data.error ?? t('imp.err.read'));
         return;
       }
       setPreview(data);
       setMapping(data.suggestedMapping);
       setDateOrder(data.dateOrderAmbiguous ? 'dmy' : 'auto');
     } catch {
-      setError('Could not upload that file');
+      setError(t('imp.err.upload'));
     } finally {
       setBusy(false);
     }
@@ -106,16 +109,16 @@ export function ImportWizard({ accounts }: { accounts: Array<{ id: string; name:
         return;
       }
       if (!res.ok) {
-        setError(data.error ?? 'Import failed');
+        setError(data.error ?? t('imp.err.import'));
         return;
       }
 
       setResult(data);
       setPreview(null);
-      toast.show(`${data.imported} transactions imported`);
+      toast.show(t('imp.toast', { n: data.imported }));
       router.refresh();
     } catch {
-      setError('Could not reach the server');
+      setError(t('common.offline'));
     } finally {
       setBusy(false);
     }
@@ -130,29 +133,28 @@ export function ImportWizard({ accounts }: { accounts: Array<{ id: string; name:
   if (result) {
     return (
       <Card className="p-6">
-        <h2 className="text-sm font-semibold">Import complete</h2>
+        <h2 className="text-sm font-semibold">{t('imp.done')}</h2>
         <div className="mt-4 grid gap-2 text-sm">
           <p>
-            <span className="num font-semibold">{result.imported}</span> transactions imported.
+            {t('imp.doneCount', { n: result.imported })}
           </p>
           {result.skippedDuplicates > 0 && (
             <p style={{ color: 'var(--text-muted)' }}>
-              <span className="num">{result.skippedDuplicates}</span> rows were already in Reclip and were skipped.
+              {t('imp.skippedDup', { n: result.skippedDuplicates })}
             </p>
           )}
           <p style={{ color: 'var(--text-muted)' }}>
-            Matching ran automatically: <span className="num">{result.matching.auto}</span> matched,{' '}
-            <span className="num">{result.matching.review}</span> need review.
+            {t('imp.matchingRan', { auto: result.matching.auto, review: result.matching.review })}
           </p>
         </div>
 
         {result.issues.length > 0 && (
           <div className="mt-4">
-            <Alert tone="warning" title={`${result.issues.length} row${result.issues.length === 1 ? '' : 's'} skipped`}>
+            <Alert tone="warning" title={result.issues.length === 1 ? t('imp.rowsSkippedOne') : t('imp.rowsSkippedMany', { n: result.issues.length })}>
               <ul className="mt-1 grid gap-1">
                 {result.issues.slice(0, 6).map((issue) => (
                   <li key={`${issue.rowNumber}-${issue.reason}`} className="text-xs">
-                    Row {issue.rowNumber}: {issue.reason}
+                    {t('imp.rowIssue', { row: issue.rowNumber, reason: issue.reason })}
                   </li>
                 ))}
               </ul>
@@ -162,13 +164,13 @@ export function ImportWizard({ accounts }: { accounts: Array<{ id: string; name:
 
         <div className="mt-5 flex flex-wrap gap-2">
           <Link href="/app/review" className="btn btn-accent">
-            Review matches
+            {t('imp.reviewMatches')}
           </Link>
           <Link href="/app/transactions" className="btn btn-ghost">
-            See transactions
+            {t('imp.seeTransactions')}
           </Link>
           <button className="btn btn-ghost" onClick={() => setResult(null)}>
-            Import another file
+            {t('imp.another')}
           </button>
         </div>
         {toast.node}
@@ -191,18 +193,18 @@ export function ImportWizard({ accounts }: { accounts: Array<{ id: string; name:
             if (file) choose(file);
           }}
         >
-          <p className="text-sm font-medium">Drop your bank CSV here</p>
+          <p className="text-sm font-medium">{t('imp.drop')}</p>
           <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
-            Nothing is saved until you confirm the columns.
+            {t('imp.dropNote')}
           </p>
           <button className="btn btn-accent mt-5" onClick={() => inputRef.current?.click()} disabled={busy}>
             {busy && <Spinner />}
-            Choose CSV file
+            {t('imp.chooseFile')}
           </button>
           <input
             ref={inputRef}
             type="file"
-            aria-label="Choose a bank statement CSV file"
+            aria-label={t('imp.inputLabel')}
             accept=".csv,text/csv"
             className="sr-only"
             onChange={(e) => {
@@ -214,11 +216,9 @@ export function ImportWizard({ accounts }: { accounts: Array<{ id: string; name:
         </div>
 
         <Card className="p-5">
-          <h2 className="text-sm font-semibold">Reclip understands most bank exports</h2>
+          <h2 className="text-sm font-semibold">{t('imp.understandsTitle')}</h2>
           <p className="mt-1.5 text-sm" style={{ color: 'var(--text-muted)' }}>
-            Column names like <code className="text-xs">Booking Date</code>, <code className="text-xs">Value Date</code>,{' '}
-            <code className="text-xs">Verwendungszweck</code> or <code className="text-xs">Libellé</code> are recognised
-            automatically, as are separate Debit and Credit columns and both decimal conventions.
+            {t('imp.understandsBody', { a: 'Booking Date', b: 'Value Date', c: 'Verwendungszweck', d: 'Libellé' })}
           </p>
         </Card>
       </div>
@@ -230,14 +230,14 @@ export function ImportWizard({ accounts }: { accounts: Array<{ id: string; name:
     <div className="grid gap-4">
       {error && <Alert tone="danger">{error}</Alert>}
       {duplicatePrompt && (
-        <Alert tone="warning" title="This file has been imported before">
+        <Alert tone="warning" title={t('imp.dupTitle')}>
           {duplicatePrompt}
           <div className="mt-2 flex gap-2">
             <button className="btn btn-ghost px-2.5 py-1 text-xs" onClick={() => commit(true)} disabled={busy}>
-              Import anyway
+              {t('imp.importAnyway')}
             </button>
             <button className="btn btn-ghost px-2.5 py-1 text-xs" onClick={() => setPreview(null)}>
-              Cancel
+              {t('imp.cancel')}
             </button>
           </div>
         </Alert>
@@ -247,12 +247,12 @@ export function ImportWizard({ accounts }: { accounts: Array<{ id: string; name:
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h2 className="text-sm font-semibold">{preview.filename}</h2>
           <p className="num text-xs" style={{ color: 'var(--text-muted)' }}>
-            {preview.totalRows} rows
+            {t('imp.rows', { n: preview.totalRows })}
           </p>
         </div>
 
         <p className="mt-4 text-xs font-medium" style={{ color: 'var(--text-muted)' }}>
-          Match your CSV columns to Reclip fields
+          {t('imp.matchColumns')}
         </p>
 
         <div className="mt-3 grid gap-2">
@@ -272,11 +272,11 @@ export function ImportWizard({ accounts }: { accounts: Array<{ id: string; name:
                   className="input w-full py-1.5 text-xs sm:w-44"
                   value={mapping[header] ?? 'ignore'}
                   onChange={(e) => setMapping((m) => ({ ...m, [header]: e.target.value as TargetField }))}
-                  aria-label={`Map column ${header}`}
+                  aria-label={t('imp.mapColumn', { name: header })}
                 >
-                  {TARGETS.map((t) => (
-                    <option key={t.value} value={t.value}>
-                      {t.label}
+                  {TARGETS.map((target) => (
+                    <option key={target.value} value={target.value}>
+                      {t(target.label)}
                     </option>
                   ))}
                 </select>
@@ -287,25 +287,25 @@ export function ImportWizard({ accounts }: { accounts: Array<{ id: string; name:
 
         {!canCommit && (
           <p className="mt-3 text-xs" style={{ color: 'var(--warn)' }}>
-            Map at least a Date column and an Amount column (or Debit/Credit) to continue.
+            {t('imp.needMap')}
           </p>
         )}
       </Card>
 
       <Card className="grid gap-4 p-5">
-        <h2 className="text-sm font-semibold">Import settings</h2>
+        <h2 className="text-sm font-semibold">{t('imp.settings')}</h2>
 
         {preview.dateOrderAmbiguous && (
           <div>
             <label className="label" htmlFor="date-order">
-              Date order
+              {t('imp.dateOrder')}
             </label>
             <select id="date-order" className="input" value={dateOrder} onChange={(e) => setDateOrder(e.target.value as never)}>
-              <option value="dmy">Day / Month / Year (01/02/2026 = 1 February)</option>
-              <option value="mdy">Month / Day / Year (01/02/2026 = 2 January)</option>
+              <option value="dmy">{t('imp.dmy')}</option>
+              <option value="mdy">{t('imp.mdy')}</option>
             </select>
             <p className="mt-1.5 text-xs" style={{ color: 'var(--text-subtle)' }}>
-              This file&apos;s dates could be read either way round, so please confirm.
+              {t('imp.dateAmbiguous')}
             </p>
           </div>
         )}
@@ -313,7 +313,7 @@ export function ImportWizard({ accounts }: { accounts: Array<{ id: string; name:
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label className="label" htmlFor="account">
-              Bank account
+              {t('imp.account')}
             </label>
             {accounts.length > 0 ? (
               <select id="account" className="input" value={accountId} onChange={(e) => setAccountId(e.target.value)}>
@@ -322,7 +322,7 @@ export function ImportWizard({ accounts }: { accounts: Array<{ id: string; name:
                     {a.name}
                   </option>
                 ))}
-                <option value="">+ New account…</option>
+                <option value="">{t('imp.newAccountOption')}</option>
               </select>
             ) : (
               <input id="account" className="input" value={accountName} onChange={(e) => setAccountName(e.target.value)} />
@@ -330,17 +330,17 @@ export function ImportWizard({ accounts }: { accounts: Array<{ id: string; name:
             {accounts.length > 0 && accountId === '' && (
               <input
                 className="input mt-2"
-                placeholder="New account name"
+                placeholder={t('imp.newAccountName')}
                 value={accountName}
                 onChange={(e) => setAccountName(e.target.value)}
-                aria-label="New account name"
+                aria-label={t('imp.newAccountName')}
               />
             )}
           </div>
 
           <div>
             <label className="label" htmlFor="currency">
-              Default currency
+              {t('imp.currency')}
             </label>
             <input
               id="currency"
@@ -350,12 +350,11 @@ export function ImportWizard({ accounts }: { accounts: Array<{ id: string; name:
               onChange={(e) => setCurrency(e.target.value.toUpperCase())}
             />
             <p className="mt-1.5 text-xs" style={{ color: 'var(--text-subtle)' }}>
-              Used only for rows without their own currency column.
+              {t('imp.currencyNote')}
             </p>
             {preview.amountsLookThreeDecimal && !isThreeDecimalCurrency(currency) && (
               <p className="mt-2 text-xs" style={{ color: 'var(--warn, #b45309)' }} role="note">
-                These amounts have three decimals (like 47,850), as dinar amounts do. If this statement is in Tunisian
-                dinars, enter TND, otherwise your receipts in TND will not match it.
+                {t('imp.threeDecimals')}
               </p>
             )}
           </div>
@@ -364,9 +363,9 @@ export function ImportWizard({ accounts }: { accounts: Array<{ id: string; name:
         <label className="flex items-start gap-2.5 text-sm">
           <input type="checkbox" className="mt-0.5" checked={invertAmounts} onChange={(e) => setInvertAmounts(e.target.checked)} />
           <span>
-            Flip the sign on amounts
+            {t('imp.flip')}
             <span className="block text-xs" style={{ color: 'var(--text-subtle)' }}>
-              Tick this if your bank exports expenses as positive numbers.
+              {t('imp.flipNote')}
             </span>
           </span>
         </label>
@@ -375,10 +374,10 @@ export function ImportWizard({ accounts }: { accounts: Array<{ id: string; name:
       <div className="flex flex-wrap gap-2">
         <button className="btn btn-accent" onClick={() => commit(false)} disabled={busy || !canCommit}>
           {busy && <Spinner />}
-          Import {preview.totalRows} rows
+          {t('imp.importRows', { n: preview.totalRows })}
         </button>
         <button className="btn btn-ghost" onClick={() => setPreview(null)} disabled={busy}>
-          Choose a different file
+          {t('imp.different')}
         </button>
       </div>
       {toast.node}

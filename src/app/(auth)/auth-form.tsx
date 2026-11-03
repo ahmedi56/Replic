@@ -4,8 +4,10 @@ import { useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Alert, Spinner } from '@/components/ui';
+import { useT } from '@/lib/i18n/client';
 
 export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
+  const t = useT();
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -17,7 +19,7 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
 
     const form = new FormData(event.currentTarget);
     if (mode === 'signup' && form.get('acceptTerms') !== 'on') {
-      setError('Please accept the Terms of Service and Privacy Policy to create your account.');
+      setError(t('auth.acceptTermsError'));
       setBusy(false);
       return;
     }
@@ -42,7 +44,7 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        setError(data.error ?? 'Something went wrong. Please try again.');
+        setError(data.error ?? t('common.tryAgain'));
         setBusy(false);
         return;
       }
@@ -51,7 +53,7 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
       router.push(mode === 'signup' || data.onboarded === false ? '/app/welcome' : '/app');
       router.refresh();
     } catch {
-      setError('Could not reach the server. Check your connection and try again.');
+      setError(t('common.offline'));
       setBusy(false);
     }
   }
@@ -64,13 +66,13 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
         <>
           <div>
             <label className="label" htmlFor="name">
-              Your name
+              {t('auth.yourName')}
             </label>
             <input id="name" name="name" className="input" autoComplete="name" placeholder="Ahmed" />
           </div>
           <div>
             <label className="label" htmlFor="organizationName">
-              Workspace name <span style={{ color: 'var(--text-subtle)' }}>(optional)</span>
+              {t('auth.workspaceName')} <span style={{ color: 'var(--text-subtle)' }}>{t('common.optional')}</span>
             </label>
             <input id="organizationName" name="organizationName" className="input" placeholder="Ahmed Consulting" />
           </div>
@@ -79,14 +81,14 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
 
       <div>
         <label className="label" htmlFor="email">
-          Email
+          {t('common.email')}
         </label>
         <input id="email" name="email" type="email" required className="input" autoComplete="email" placeholder="you@company.com" />
       </div>
 
       <div>
         <label className="label" htmlFor="password">
-          Password
+          {t('common.password')}
         </label>
         <input
           id="password"
@@ -96,12 +98,12 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
           minLength={mode === 'signup' ? 10 : undefined}
           className="input"
           autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
-          placeholder={mode === 'signup' ? 'At least 10 characters' : '••••••••'}
+          placeholder={mode === 'signup' ? t('auth.passwordPlaceholderNew') : '••••••••'}
           aria-describedby={mode === 'signup' ? 'password-hint' : undefined}
         />
         {mode === 'signup' && (
           <p id="password-hint" className="mt-1.5 text-xs" style={{ color: 'var(--text-subtle)' }}>
-            At least 10 characters. A passphrase works well.
+            {t('auth.passwordHint')}
           </p>
         )}
       </div>
@@ -110,13 +112,13 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
         <label className="flex items-start gap-2.5 text-sm" style={{ color: 'var(--text-muted)' }}>
           <input type="checkbox" name="acceptTerms" required className="mt-1" />
           <span>
-            I agree to the{' '}
+            {t('auth.agreePrefix')}{' '}
             <Link href="/terms" target="_blank" className="link">
-              Terms of Service
+              {t('auth.terms')}
             </Link>{' '}
-            and the{' '}
+            {t('auth.and')}{' '}
             <Link href="/privacy" target="_blank" className="link">
-              Privacy Policy
+              {t('auth.privacy')}
             </Link>
             .
           </span>
@@ -125,12 +127,12 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
 
       <button type="submit" className="btn btn-primary mt-1 w-full py-2.5" disabled={busy}>
         {busy && <Spinner />}
-        {mode === 'signup' ? 'Create account' : 'Sign in'}
+        {mode === 'signup' ? t('auth.createAccount') : t('auth.signIn')}
       </button>
 
       {mode === 'login' && (
         <Link href="/reset" className="text-center text-sm" style={{ color: 'var(--text-muted)' }}>
-          Forgot your password?
+          {t('auth.forgot')}
         </Link>
       )}
     </form>

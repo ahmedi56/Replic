@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useT } from '@/lib/i18n/client';
+import type { MessageKey } from '@/lib/i18n/messages';
 
 /** Shared presentational primitives. Deliberately small — no component library. */
 
@@ -34,23 +36,24 @@ export function ConfidenceBadge({ value }: { value: number | null | undefined })
 }
 
 export function StatusBadge({ status, isDuplicate }: { status: string; isDuplicate?: boolean }) {
-  if (isDuplicate) return <Badge tone="warning">Possible duplicate</Badge>;
-  const map: Record<string, { label: string; tone: Tone }> = {
-    uploaded: { label: 'Uploaded', tone: 'neutral' },
-    processing: { label: 'Processing', tone: 'info' },
-    extracting: { label: 'Extracting', tone: 'info' },
-    matching: { label: 'Matching', tone: 'info' },
-    completed: { label: 'Processed', tone: 'neutral' },
-    unmatched: { label: 'Unmatched', tone: 'neutral' },
-    needs_review: { label: 'Needs review', tone: 'warning' },
-    failed: { label: 'Failed', tone: 'danger' },
-    confirmed: { label: 'Confirmed', tone: 'success' },
-    auto: { label: 'Auto-matched', tone: 'success' },
-    suggested: { label: 'Needs review', tone: 'warning' },
-    rejected: { label: 'Rejected', tone: 'neutral' },
+  const t = useT();
+  if (isDuplicate) return <Badge tone="warning">{t('status.duplicate')}</Badge>;
+  const map: Record<string, { label: MessageKey; tone: Tone }> = {
+    uploaded: { label: 'status.uploaded', tone: 'neutral' },
+    processing: { label: 'status.processing', tone: 'info' },
+    extracting: { label: 'status.extracting', tone: 'info' },
+    matching: { label: 'status.matching', tone: 'info' },
+    completed: { label: 'status.completed', tone: 'neutral' },
+    unmatched: { label: 'status.unmatched', tone: 'neutral' },
+    needs_review: { label: 'status.needs_review', tone: 'warning' },
+    failed: { label: 'status.failed', tone: 'danger' },
+    confirmed: { label: 'status.confirmed', tone: 'success' },
+    auto: { label: 'status.auto', tone: 'success' },
+    suggested: { label: 'status.suggested', tone: 'warning' },
+    rejected: { label: 'status.rejected', tone: 'neutral' },
   };
-  const entry = map[status] ?? { label: status, tone: 'neutral' as Tone };
-  return <Badge tone={entry.tone}>{entry.label}</Badge>;
+  const entry = map[status];
+  return <Badge tone={entry?.tone ?? 'neutral'}>{entry ? t(entry.label) : status}</Badge>;
 }
 
 export function Card({ children, className = '', ...rest }: { children: ReactNode; className?: string } & React.HTMLAttributes<HTMLDivElement>) {
@@ -101,6 +104,7 @@ export function Spinner({ size = 16 }: { size?: number }) {
 }
 
 export function ProgressBar({ value, label }: { value: number; label?: string }) {
+  const t = useT();
   const pct = Math.max(0, Math.min(100, value));
   return (
     <div>
@@ -111,7 +115,7 @@ export function ProgressBar({ value, label }: { value: number; label?: string })
         aria-valuenow={Math.round(pct)}
         aria-valuemin={0}
         aria-valuemax={100}
-        aria-label={label ?? 'Progress'}
+        aria-label={label ?? t('ui.progress')}
       >
         <div className="h-full rounded-full transition-[width] duration-300" style={{ width: `${pct}%`, background: 'var(--accent)' }} />
       </div>
@@ -162,6 +166,7 @@ export function useToast() {
 }
 
 export function Pagination({ page, pageSize, total, onChange }: { page: number; pageSize: number; total: number; onChange: (page: number) => void }) {
+  const t = useT();
   const pages = Math.max(1, Math.ceil(total / pageSize));
   if (total <= pageSize) return null;
   const from = (page - 1) * pageSize + 1;
@@ -170,17 +175,17 @@ export function Pagination({ page, pageSize, total, onChange }: { page: number; 
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 border-t px-4 py-3">
       <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-        <span className="num">{from}–{to}</span> of <span className="num">{total}</span>
+        {t('ui.range', { from, to, total })}
       </p>
       <div className="flex items-center gap-2">
         <button className="btn btn-ghost px-2.5 py-1.5 text-xs" onClick={() => onChange(page - 1)} disabled={page <= 1}>
-          Previous
+          {t('common.previous')}
         </button>
         <span className="num text-xs" style={{ color: 'var(--text-muted)' }}>
           {page} / {pages}
         </span>
         <button className="btn btn-ghost px-2.5 py-1.5 text-xs" onClick={() => onChange(page + 1)} disabled={page >= pages}>
-          Next
+          {t('common.next')}
         </button>
       </div>
     </div>

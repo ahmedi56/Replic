@@ -159,6 +159,6 @@ const tnCsv = [
 fs.writeFileSync(path.join(tnDir, 'releve-bancaire.csv'), tnCsv + '\n');
 
 console.log(`\nTunisian set: ${TN_RECEIPTS.length + 1} receipts and releve-bancaire.csv in ${tnDir}`);
-console.log('Import the statement with currency TND. Expected: 3 clean matches (Monoprix, Dar El Jeld, Pharmacie),');
-console.log('1 for review (Magasin General, 0,500 DT higher), 1 receipt with no bank line (cash station),');
+console.log('Import the statement with currency TND. Expected: 2 automatic matches (Monoprix, Pharmacie),');
+console.log('2 for review (Dar El Jeld: name only 64% alike; Magasin General: 0,500 DT higher), 1 receipt with no bank line (cash station),');
 console.log('1 duplicate (the COPIE file), and 3 bank lines with no receipt (retrait, commission, virement).');

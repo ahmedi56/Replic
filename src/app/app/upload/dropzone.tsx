@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Alert, Card, ProgressBar, Spinner } from '@/components/ui';
+import { useT } from '@/lib/i18n/client';
 
 /**
  * Bulk upload.
@@ -32,6 +33,7 @@ interface FileState {
 }
 
 export function UploadDropzone() {
+  const t = useT();
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
@@ -68,7 +70,7 @@ export function UploadDropzone() {
 
             if (!res.ok) {
               setFiles((prev) =>
-                prev.map((f, i) => (i === stateIndex ? { ...f, status: 'failed', error: data.error ?? 'Upload failed' } : f)),
+                prev.map((f, i) => (i === stateIndex ? { ...f, status: 'failed', error: data.error ?? t('up.err.upload') } : f)),
               );
               continue;
             }
@@ -80,7 +82,7 @@ export function UploadDropzone() {
             );
           } catch {
             setFiles((prev) =>
-              prev.map((f, i) => (i === stateIndex ? { ...f, status: 'failed', error: 'Network error' } : f)),
+              prev.map((f, i) => (i === stateIndex ? { ...f, status: 'failed', error: t('up.err.network') } : f)),
             );
           }
         }
@@ -88,7 +90,8 @@ export function UploadDropzone() {
 
       await Promise.all(Array.from({ length: Math.min(CONCURRENCY, selected.length) }, worker));
     },
-    [files.length],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [files.length, t],
   );
 
   // Poll for the files a worker is still handling, and refresh the page data once all are done.
@@ -119,12 +122,12 @@ export function UploadDropzone() {
             const r = byId.get(f.receiptId);
             if (r?.done) {
               return r.failed
-                ? { ...f, status: 'failed', error: 'Could not read this file' }
+                ? { ...f, status: 'failed', error: t('up.err.read') }
                 : { ...f, status: 'done', matched: r.matched, duplicate: r.duplicate };
             }
             // Gave up waiting: the receipt is saved, it just has not finished yet.
             if (f.sentAt && Date.now() - f.sentAt > PROCESSING_TIMEOUT_MS) {
-              return { ...f, status: 'failed', error: 'Still processing. It will appear in your receipts when done' };
+              return { ...f, status: 'failed', error: t('up.err.timeout') };
             }
             return f;
           }),
@@ -171,18 +174,18 @@ export function UploadDropzone() {
           <path d="M12 16V4M8 8l4-4 4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
           <path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
         </svg>
-        <p className="mt-4 text-sm font-medium">Drop your receipts here</p>
+        <p className="mt-4 text-sm font-medium">{t('up.drop')}</p>
         <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
-          or choose files from your device
+          {t('up.orChoose')}
         </p>
 
         <div className="mt-5 flex flex-wrap justify-center gap-2">
           <button type="button" className="btn btn-accent" onClick={() => inputRef.current?.click()}>
-            Choose files
+            {t('up.choose')}
           </button>
           {/* Mobile: opens the camera directly. */}
           <label className="btn btn-ghost cursor-pointer sm:hidden">
-            Take a photo
+            {t('up.photo')}
             <input
               type="file"
               accept="image/*"
@@ -200,7 +203,7 @@ export function UploadDropzone() {
           ref={inputRef}
           type="file"
           multiple
-          aria-label="Choose receipt files to upload"
+          aria-label={t('up.inputLabel')}
           accept={ACCEPT}
           className="sr-only"
           onChange={(e) => {
@@ -209,54 +212,54 @@ export function UploadDropzone() {
           }}
         />
         <p className="mt-4 text-xs" style={{ color: 'var(--text-subtle)' }}>
-          JPG · PNG · WEBP · PDF · up to 15MB each
+          {t('up.limits')}
         </p>
       </div>
 
       {files.length > 0 && (
         <Card className="p-5">
           <div className="flex items-baseline justify-between gap-3">
-            <p className="text-sm font-medium">{busy ? 'Processing receipts…' : 'Finished'}</p>
+            <p className="text-sm font-medium">{busy ? t('up.processing') : t('up.finished')}</p>
             <p className="num text-sm" style={{ color: 'var(--text-muted)' }}>
-              {processed} / {files.length} processed
+              {t('up.progress', { done: processed, total: files.length })}
             </p>
           </div>
           <div className="mt-3">
-            <ProgressBar value={(processed / files.length) * 100} label="Upload progress" />
+            <ProgressBar value={(processed / files.length) * 100} label={t('up.progressLabel')} />
           </div>
 
           {!busy && (
             <div className="mt-5 grid gap-3">
               <div className="flex flex-wrap gap-2 text-xs">
                 <span className="chip" style={{ background: 'color-mix(in srgb, var(--accent) 15%, transparent)', color: 'var(--accent-ink)' }}>
-                  {succeeded} processed
+                  {t('up.nProcessed', { n: succeeded })}
                 </span>
                 {matched > 0 && (
                   <span className="chip" style={{ background: 'color-mix(in srgb, var(--accent) 15%, transparent)', color: 'var(--accent-ink)' }}>
-                    {matched} matched automatically
+                    {t('up.nMatched', { n: matched })}
                   </span>
                 )}
                 {duplicates > 0 && (
                   <span className="chip" style={{ background: 'var(--warn-bg)', color: 'var(--warn)' }}>
-                    {duplicates} possible duplicate{duplicates === 1 ? '' : 's'}
+                    {duplicates === 1 ? t('dash.dupOne') : t('dash.dupMany', { n: duplicates })}
                   </span>
                 )}
                 {failed.length > 0 && (
                   <span className="chip" style={{ background: 'var(--danger-bg)', color: 'var(--danger)' }}>
-                    {failed.length} failed
+                    {t('up.nFailed', { n: failed.length })}
                   </span>
                 )}
               </div>
 
               <div className="flex flex-wrap gap-2">
                 <Link href="/app/review" className="btn btn-accent text-xs">
-                  Review matches
+                  {t('up.reviewMatches')}
                 </Link>
                 <Link href="/app/receipts" className="btn btn-ghost text-xs">
-                  See all receipts
+                  {t('up.seeAll')}
                 </Link>
                 <button className="btn btn-ghost text-xs" onClick={() => setFiles([])}>
-                  Clear list
+                  {t('up.clear')}
                 </button>
               </div>
             </div>
@@ -264,7 +267,7 @@ export function UploadDropzone() {
 
           {failed.length > 0 && (
             <div className="mt-4">
-              <Alert tone="danger" title={`${failed.length} file${failed.length === 1 ? '' : 's'} couldn't be processed`}>
+              <Alert tone="danger" title={failed.length === 1 ? t('up.failedOne') : t('up.failedMany', { n: failed.length })}>
                 <ul className="mt-1 grid gap-1">
                   {failed.slice(0, 5).map((f) => (
                     <li key={f.name} className="truncate text-xs">
@@ -273,9 +276,9 @@ export function UploadDropzone() {
                   ))}
                 </ul>
                 <p className="mt-2 text-xs">
-                  You can try again, or{' '}
+                  {t('up.tryAgain')}{' '}
                   <Link href="/app/receipts" className="link">
-                    add the details manually
+                    {t('up.addManual')}
                   </Link>
                   .
                 </p>
@@ -293,8 +296,8 @@ export function UploadDropzone() {
                 <span className="min-w-0 flex-1 truncate" style={{ color: f.status === 'failed' ? 'var(--danger)' : 'var(--text-muted)' }}>
                   {f.name}
                 </span>
-                {f.duplicate && <span style={{ color: 'var(--warn)' }}>duplicate</span>}
-                {f.matched && <span style={{ color: 'var(--accent-ink)' }}>matched</span>}
+                {f.duplicate && <span style={{ color: 'var(--warn)' }}>{t('up.dupTag')}</span>}
+                {f.matched && <span style={{ color: 'var(--accent-ink)' }}>{t('up.matchedTag')}</span>}
               </li>
             ))}
           </ul>

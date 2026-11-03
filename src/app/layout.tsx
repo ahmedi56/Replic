@@ -1,13 +1,17 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
+import { getLocale, makeT } from '@/lib/i18n/server';
+import { I18nProvider } from '@/lib/i18n/client';
 
-export const metadata: Metadata = {
-  title: { default: 'Reclip: Receipts in. Reconciliation done.', template: '%s · Reclip' },
-  description:
-    'Upload your receipts, import your bank transactions, and let Reclip reconcile them automatically, with a confidence score and a reason for every match.',
-  applicationName: 'Reclip',
-  robots: { index: true, follow: true },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = makeT(await getLocale());
+  return {
+    title: { default: 'Reclip: Receipts in. Reconciliation done.', template: '%s · Reclip' },
+    description: t('meta.description'),
+    applicationName: 'Reclip',
+    robots: { index: true, follow: true },
+  };
+}
 
 export const viewport: Viewport = {
   width: 'device-width',
@@ -29,9 +33,11 @@ var o=new MutationObserver(function(m){for(var i=0;i<m.length;i++){var t=m[i].ta
 o.observe(document.documentElement,{attributes:true,attributeFilter:[a],subtree:true,childList:true});
 s(document);setTimeout(function(){o.disconnect();},5000);})();`;
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const locale = await getLocale();
+  const t = makeT(locale);
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang={locale} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: STRIP_EXTENSION_ATTRS }} />
       </head>
@@ -42,9 +48,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:px-4 focus:py-2"
           style={{ background: 'var(--surface-raised)', border: '1px solid var(--border)' }}
         >
-          Skip to content
+          {t('common.skip')}
         </a>
-        {children}
+        <I18nProvider locale={locale}>{children}</I18nProvider>
       </body>
     </html>
   );
