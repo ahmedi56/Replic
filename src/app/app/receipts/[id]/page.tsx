@@ -6,19 +6,22 @@ import { getAuditTrailFor } from '@/lib/services/stats';
 import { listCategories } from '@/lib/services/org';
 import { listMatchesForReceipt } from '@/lib/services/matching';
 import { ReceiptDetail } from './detail';
+import { getLocale, makeT } from '@/lib/i18n/server';
 
 export const dynamic = 'force-dynamic';
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  const fallback = makeT(await getLocale())('dt.metaFallback');
   const auth = await getAuth();
-  if (!auth) return { title: 'Receipt' };
+  if (!auth) return { title: fallback };
   const row = await getReceipt(auth.organizationId, (await params).id);
-  return { title: row?.extraction?.merchantRaw ?? row?.receipt.originalName ?? 'Receipt' };
+  return { title: row?.extraction?.merchantRaw ?? row?.receipt.originalName ?? fallback };
 }
 
 export default async function ReceiptDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const auth = await getAuth();
   if (!auth) redirect('/login');
+  const t = makeT(await getLocale());
 
   const { id } = await params;
   const row = await getReceipt(auth.organizationId, id);
@@ -33,7 +36,7 @@ export default async function ReceiptDetailPage({ params }: { params: Promise<{ 
   return (
     <div className="mx-auto max-w-5xl">
       <Link href="/app/receipts" className="mb-4 inline-flex items-center gap-1.5 text-sm" style={{ color: 'var(--text-muted)' }}>
-        ← All receipts
+        ← {t('dt.back')}
       </Link>
       <ReceiptDetail
         receipt={{

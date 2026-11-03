@@ -15,6 +15,11 @@ import {
   useToast,
 } from '@/components/ui';
 import type { StoredBreakdown } from '@/lib/matching/score';
+import { useLocale, useT } from '@/lib/i18n/client';
+import { translateReason } from '@/lib/i18n/reasons';
+import { messages, type MessageKey } from '@/lib/i18n/messages';
+
+const messagesHave = (key: string): key is MessageKey => key in messages.en;
 
 /**
  * Receipt detail: the document, what was read from it, what it was matched to, and
@@ -71,14 +76,14 @@ interface Candidate {
   classification: string;
 }
 
-const FIELDS: Array<{ key: keyof ExtractionProps; label: string; type: 'text' | 'number' | 'date' }> = [
-  { key: 'merchantRaw', label: 'Merchant', type: 'text' },
-  { key: 'date', label: 'Date', type: 'date' },
-  { key: 'total', label: 'Total', type: 'number' },
-  { key: 'subtotal', label: 'Subtotal', type: 'number' },
-  { key: 'tax', label: 'VAT / Tax', type: 'number' },
-  { key: 'currency', label: 'Currency', type: 'text' },
-  { key: 'invoiceNumber', label: 'Invoice number', type: 'text' },
+const FIELDS: Array<{ key: keyof ExtractionProps; label: MessageKey; type: 'text' | 'number' | 'date' }> = [
+  { key: 'merchantRaw', label: 'col.merchant', type: 'text' },
+  { key: 'date', label: 'col.date', type: 'date' },
+  { key: 'total', label: 'dt.total', type: 'number' },
+  { key: 'subtotal', label: 'dt.subtotal', type: 'number' },
+  { key: 'tax', label: 'dt.tax', type: 'number' },
+  { key: 'currency', label: 'imp.field.currency', type: 'text' },
+  { key: 'invoiceNumber', label: 'dt.invoice', type: 'text' },
 ];
 
 const CONFIDENCE_KEY: Partial<Record<string, string>> = {
@@ -104,6 +109,8 @@ export function ReceiptDetail({
   matches: MatchProps[];
   audit: Array<{ id: string; action: string; actorLabel: string; detail: string | null; createdAt: string }>;
 }) {
+  const t = useT();
+  const locale = useLocale();
   const router = useRouter();
   const toast = useToast();
   const [editing, setEditing] = useState(false);
@@ -150,10 +157,10 @@ export function ReceiptDetail({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toast.show(data.error ?? 'Could not save those changes', 'danger');
+        toast.show(data.error ?? t('dt.err.save'), 'danger');
         return;
       }
-      toast.show('Saved and re-matched');
+      toast.show(t('dt.savedRematched'));
       setEditing(false);
       router.refresh();
     } finally {
@@ -171,7 +178,7 @@ export function ReceiptDetail({
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        toast.show(data.error ?? 'Could not save', 'danger');
+        toast.show(data.error ?? t('dt.err.saveShort'), 'danger');
         return;
       }
       toast.show(successMessage);
@@ -191,10 +198,10 @@ export function ReceiptDetail({
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        toast.show(data.error ?? 'Could not update that match', 'danger');
+        toast.show(data.error ?? t('dt.err.match'), 'danger');
         return;
       }
-      toast.show(action === 'confirm' ? 'Match confirmed' : action === 'reject' ? 'Match rejected' : 'Transaction unlinked');
+      toast.show(action === 'confirm' ? t('rev.confirmed') : action === 'reject' ? t('rev.rejected') : t('dt.unlinked'));
       router.refresh();
     } finally {
       setBusy(false);
@@ -222,10 +229,10 @@ export function ReceiptDetail({
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        toast.show(data.error ?? 'Could not link that transaction', 'danger');
+        toast.show(data.error ?? t('dt.err.link'), 'danger');
         return;
       }
-      toast.show('Linked');
+      toast.show(t('dt.linked'));
       setCandidates(null);
       router.refresh();
     } finally {
@@ -233,12 +240,17 @@ export function ReceiptDetail({
     }
   }
 
+  const auditLabel = (action: string) => {
+    const key = `act.${action}` as MessageKey;
+    return messagesHave(key) ? t(key) : action.replace(/[._]/g, ' ');
+  };
+
   async function remove() {
-    if (!window.confirm('Delete this receipt and its stored document? This cannot be undone.')) return;
+    if (!window.confirm(t('dt.confirmDelete'))) return;
     setBusy(true);
     const res = await fetch(`/api/receipts/${receipt.id}`, { method: 'DELETE' });
     if (!res.ok) {
-      toast.show('Could not delete this receipt', 'danger');
+      toast.show(t('dt.err.delete'), 'danger');
       setBusy(false);
       return;
     }
@@ -256,43 +268,43 @@ export function ReceiptDetail({
             <StatusBadge status={receipt.status} isDuplicate={receipt.isDuplicate} />
             {extraction && <ConfidenceBadge value={extraction.overallConfidence} />}
             <span className="text-xs" style={{ color: 'var(--text-subtle)' }}>
-              uploaded {formatRelative(receipt.createdAt)} · {(receipt.sizeBytes / 1024).toFixed(0)} KB
+              {t('dt.uploaded', { when: formatRelative(receipt.createdAt, locale), kb: (receipt.sizeBytes / 1024).toFixed(0) })}
             </span>
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
           <a href={`/api/receipts/${receipt.id}/file?download=1`} className="btn btn-ghost text-xs" download>
-            Download original
+            {t('dt.download')}
           </a>
           <button className="btn btn-danger text-xs" onClick={remove} disabled={busy}>
-            Delete
+            {t('dt.delete')}
           </button>
         </div>
       </div>
 
       {receipt.isDuplicate && (
-        <Alert tone="warning" title="Possible duplicate">
-          This looks like a receipt you already have.{' '}
+        <Alert tone="warning" title={t('status.duplicate')}>
+          {t('dt.dupBody')}{' '}
           {receipt.duplicateOfId && (
             <Link href={`/app/receipts/${receipt.duplicateOfId}`} className="link">
-              Open the original
+              {t('dt.openOriginal')}
             </Link>
           )}
-          <button className="btn btn-ghost ml-3 px-2 py-1 text-xs" onClick={() => patch({ isDuplicate: false }, 'No longer flagged as a duplicate')} disabled={busy}>
-            Not a duplicate
+          <button className="btn btn-ghost ml-3 px-2 py-1 text-xs" onClick={() => patch({ isDuplicate: false }, t('dt.notDupDone'))} disabled={busy}>
+            {t('dt.notDup')}
           </button>
         </Alert>
       )}
 
       {receipt.status === 'failed' && (
-        <Alert tone="danger" title="We couldn't read this receipt">
-          Nothing readable was found in this file. You can enter the details by hand below, or upload a clearer copy.
+        <Alert tone="danger" title={t('dt.failedTitle')}>
+          {t('dt.failedBody')}
           <div className="mt-2 flex gap-2">
             <button className="btn btn-ghost px-2 py-1 text-xs" onClick={() => setEditing(true)}>
-              Enter data manually
+              {t('dt.enterManual')}
             </button>
             <Link href="/app/upload" className="btn btn-ghost px-2 py-1 text-xs">
-              Upload a new copy
+              {t('dt.uploadNew')}
             </Link>
           </div>
         </Alert>
@@ -302,9 +314,9 @@ export function ReceiptDetail({
         {/* Document */}
         <Card className="overflow-hidden">
           <div className="flex items-center justify-between border-b px-4 py-3">
-            <h2 className="text-sm font-semibold">Original document</h2>
+            <h2 className="text-sm font-semibold">{t('dt.origDoc')}</h2>
             <span className="text-xs" style={{ color: 'var(--text-subtle)' }}>
-              never modified
+              {t('dt.neverModified')}
             </span>
           </div>
           <div style={{ background: 'var(--surface-sunken)' }}>
@@ -312,20 +324,20 @@ export function ReceiptDetail({
               <div className="relative h-[520px] w-full">
                 {/* Behind the frame, so it shows through when the browser has no PDF viewer. */}
                 <div className="absolute inset-0 flex flex-col items-center justify-center p-8 text-center text-sm" style={{ color: 'var(--text-muted)' }}>
-                  <p>Preview isn&apos;t available in this browser.</p>
+                  <p>{t('dt.noPreview')}</p>
                   <a href={`/api/receipts/${receipt.id}/file?download=1`} className="link mt-2" download>
-                    Download the original
+                    {t('dt.downloadTheOriginal')}
                   </a>
                 </div>
                 <iframe
                   src={`/api/receipts/${receipt.id}/file`}
-                  title={`Receipt: ${receipt.originalName}`}
+                  title={t('dt.docTitle', { name: receipt.originalName })}
                   className="absolute inset-0 h-full w-full border-0"
                 />
               </div>
             ) : (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={`/api/receipts/${receipt.id}/file`} alt={`Receipt: ${receipt.originalName}`} className="max-h-[520px] w-full object-contain" />
+              <img src={`/api/receipts/${receipt.id}/file`} alt={t('dt.docTitle', { name: receipt.originalName })} className="max-h-[520px] w-full object-contain" />
             )}
           </div>
         </Card>
@@ -335,31 +347,31 @@ export function ReceiptDetail({
           <Card className="overflow-hidden">
             <div className="flex items-center justify-between border-b px-4 py-3">
               <div>
-                <h2 className="text-sm font-semibold">Extracted data</h2>
+                <h2 className="text-sm font-semibold">{t('dt.extracted')}</h2>
                 {extraction && (
                   <p className="text-xs" style={{ color: 'var(--text-subtle)' }}>
-                    read by {extraction.provider}
-                    {extraction.editedByUser && ' · edited by you'}
+                    {t('dt.readBy', { provider: extraction.provider })}
+                    {extraction.editedByUser && t('dt.editedByYou')}
                   </p>
                 )}
               </div>
               {extraction && !editing && (
                 <button className="btn btn-ghost px-2.5 py-1.5 text-xs" onClick={() => setEditing(true)}>
-                  Edit
+                  {t('dt.edit')}
                 </button>
               )}
             </div>
 
             {!extraction ? (
               <div className="px-4 py-8 text-center text-sm" style={{ color: 'var(--text-muted)' }}>
-                Nothing has been extracted from this document yet.
+                {t('dt.nothingExtracted')}
               </div>
             ) : editing ? (
               <div className="grid gap-3 p-4">
                 {FIELDS.map((field) => (
                   <div key={String(field.key)}>
                     <label className="label" htmlFor={`f-${String(field.key)}`}>
-                      {field.label}
+                      {t(field.label)}
                     </label>
                     <input
                       id={`f-${String(field.key)}`}
@@ -373,7 +385,7 @@ export function ReceiptDetail({
                 ))}
                 <div>
                   <label className="label" htmlFor="f-payment">
-                    Payment method
+                    {t('sig.paymentMethod')}
                   </label>
                   <select
                     id="f-payment"
@@ -381,20 +393,20 @@ export function ReceiptDetail({
                     value={draft.paymentMethod}
                     onChange={(e) => setDraft((d) => ({ ...d, paymentMethod: e.target.value }))}
                   >
-                    <option value="">Unknown</option>
-                    <option value="card">Card</option>
-                    <option value="cash">Cash</option>
-                    <option value="transfer">Bank transfer</option>
-                    <option value="direct_debit">Direct debit</option>
+                    <option value="">{t('dt.payUnknown')}</option>
+                    <option value="card">{t('dt.payCard')}</option>
+                    <option value="cash">{t('dt.payCash')}</option>
+                    <option value="transfer">{t('dt.payTransfer')}</option>
+                    <option value="direct_debit">{t('dt.payDebit')}</option>
                   </select>
                 </div>
                 <div className="mt-1 flex gap-2">
                   <button className="btn btn-accent" onClick={save} disabled={busy}>
                     {busy && <Spinner />}
-                    Save and re-match
+                    {t('dt.saveRematch')}
                   </button>
                   <button className="btn btn-ghost" onClick={() => setEditing(false)} disabled={busy}>
-                    Cancel
+                    {t('imp.cancel')}
                   </button>
                 </div>
               </div>
@@ -406,14 +418,14 @@ export function ReceiptDetail({
                     const conf = confidence[CONFIDENCE_KEY[String(field.key)] ?? ''];
                     const display =
                       field.key === 'total' || field.key === 'subtotal' || field.key === 'tax'
-                        ? formatMoney(raw as number | null, extraction.currency ?? 'EUR')
+                        ? formatMoney(raw as number | null, extraction.currency ?? 'EUR', { locale })
                         : field.key === 'date'
-                          ? formatDate(raw as string | null)
+                          ? formatDate(raw as string | null, locale)
                           : (raw as string | null) || '-';
                     return (
                       <div key={String(field.key)} className="flex items-center justify-between gap-3 px-4 py-2.5">
                         <dt className="text-sm" style={{ color: 'var(--text-muted)' }}>
-                          {field.label}
+                          {t(field.label)}
                         </dt>
                         <dd className="flex items-center gap-2.5">
                           <span className="num text-sm font-medium">{display}</span>
@@ -424,17 +436,17 @@ export function ReceiptDetail({
                   })}
                   <div className="flex items-center justify-between gap-3 px-4 py-2.5">
                     <dt className="text-sm" style={{ color: 'var(--text-muted)' }}>
-                      Category
+                      {t('col.category')}
                     </dt>
                     <dd>
                       <select
                         className="input w-auto py-1 text-xs"
                         value={receipt.categoryId ?? ''}
-                        onChange={(e) => patch({ categoryId: e.target.value || null }, 'Category updated')}
+                        onChange={(e) => patch({ categoryId: e.target.value || null }, t('dt.catUpdated'))}
                         disabled={busy}
-                        aria-label="Category"
+                        aria-label={t('col.category')}
                       >
-                        <option value="">Uncategorised</option>
+                        <option value="">{t('dt.uncategorised')}</option>
                         {categories.map((c) => (
                           <option key={c.id} value={c.id}>
                             {c.name}
@@ -448,7 +460,7 @@ export function ReceiptDetail({
                 {extraction.overallConfidence < 0.7 && (
                   <div className="border-t px-4 py-3">
                     <p className="text-xs" style={{ color: 'var(--warn)' }}>
-                      ⚠ Review required: some fields were read with low confidence. Check them before exporting.
+                      {t('dt.reviewRequired')}
                     </p>
                   </div>
                 )}
@@ -456,7 +468,7 @@ export function ReceiptDetail({
                 {items.length > 0 && (
                   <div className="border-t px-4 py-3">
                     <p className="mb-2 text-xs font-semibold" style={{ color: 'var(--text-muted)' }}>
-                      Line items
+                      {t('dt.lineItems')}
                     </p>
                     <ul className="grid gap-1">
                       {items.slice(0, 12).map((item, i) => (
@@ -465,7 +477,7 @@ export function ReceiptDetail({
                             {item.quantity && item.quantity > 1 ? `${item.quantity} × ` : ''}
                             {item.description}
                           </span>
-                          <span className="num shrink-0">{formatMoney(item.unitPrice ?? null, extraction.currency ?? 'EUR')}</span>
+                          <span className="num shrink-0">{formatMoney(item.unitPrice ?? null, extraction.currency ?? 'EUR', { locale })}</span>
                         </li>
                       ))}
                     </ul>
@@ -478,7 +490,7 @@ export function ReceiptDetail({
           {/* Matched transaction */}
           <Card className="overflow-hidden">
             <div className="border-b px-4 py-3">
-              <h2 className="text-sm font-semibold">Matched transaction</h2>
+              <h2 className="text-sm font-semibold">{t('dt.matchedTx')}</h2>
             </div>
 
             {liveMatch ? (
@@ -487,10 +499,10 @@ export function ReceiptDetail({
                   {liveMatch.descriptionRaw}
                 </p>
                 <div className="mt-1 flex flex-wrap items-center gap-2 text-xs" style={{ color: 'var(--text-muted)' }}>
-                  <span>{formatDate(liveMatch.transactionDate)}</span>
-                  <span className="num font-medium">{formatMoney(liveMatch.amount, liveMatch.currency)}</span>
+                  <span>{formatDate(liveMatch.transactionDate, locale)}</span>
+                  <span className="num font-medium">{formatMoney(liveMatch.amount, liveMatch.currency, { locale })}</span>
                   <ConfidenceBadge value={liveMatch.score} />
-                  <span>{liveMatch.method === 'manual' ? 'matched by you' : `matched ${liveMatch.method}`}</span>
+                  <span>{liveMatch.method === 'manual' ? t('dt.matchedByYou') : t('dt.matchedMethod', { method: liveMatch.method })}</span>
                 </div>
 
                 {liveMatch.breakdown && (
@@ -502,20 +514,20 @@ export function ReceiptDetail({
                           <span style={{ color: s.positive ? 'var(--accent)' : 'var(--warn)' }} aria-hidden="true">
                             {s.positive ? '✓' : '!'}
                           </span>
-                          {s.reason}
+                          {translateReason(s.reason, t)}
                         </li>
                       ))}
                   </ul>
                 )}
 
                 <button className="btn btn-ghost mt-4 text-xs" onClick={() => matchAction(liveMatch.matchId, 'unlink')} disabled={busy}>
-                  Unlink transaction
+                  {t('dt.unlink')}
                 </button>
               </div>
             ) : suggested.length > 0 ? (
               <div className="grid gap-3 p-4">
                 <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                  {suggested.length} suggestion{suggested.length === 1 ? '' : 's'} waiting for your decision.
+                  {suggested.length === 1 ? t('dt.suggestionsOne') : t('dt.suggestionsMany', { n: suggested.length })}
                 </p>
                 {suggested.map((m) => (
                   <div key={m.matchId} className="rounded-lg border p-3">
@@ -524,14 +536,14 @@ export function ReceiptDetail({
                       <ConfidenceBadge value={m.score} />
                     </div>
                     <p className="num mt-1 text-xs" style={{ color: 'var(--text-muted)' }}>
-                      {formatDate(m.transactionDate)} · {formatMoney(m.amount, m.currency)}
+                      {formatDate(m.transactionDate, locale)} · {formatMoney(m.amount, m.currency, { locale })}
                     </p>
                     <div className="mt-2.5 flex gap-2">
                       <button className="btn btn-accent px-2.5 py-1 text-xs" onClick={() => matchAction(m.matchId, 'confirm')} disabled={busy}>
-                        Confirm
+                        {t('dt.confirm')}
                       </button>
                       <button className="btn btn-ghost px-2.5 py-1 text-xs" onClick={() => matchAction(m.matchId, 'reject')} disabled={busy}>
-                        Reject
+                        {t('rev.reject')}
                       </button>
                     </div>
                   </div>
@@ -540,16 +552,16 @@ export function ReceiptDetail({
             ) : (
               <div className="p-4">
                 <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-                  No transaction is linked to this receipt.
+                  {t('dt.noLink')}
                 </p>
                 {candidates === null ? (
                   <button className="btn btn-ghost mt-3 text-xs" onClick={loadCandidates} disabled={loadingCandidates}>
                     {loadingCandidates && <Spinner size={12} />}
-                    Find a transaction manually
+                    {t('dt.findManual')}
                   </button>
                 ) : candidates.length === 0 ? (
                   <p className="mt-3 text-xs" style={{ color: 'var(--text-subtle)' }}>
-                    No transactions to offer. Import a bank statement first.
+                    {t('dt.noCandidates')}
                   </p>
                 ) : (
                   <ul className="mt-3 grid gap-2">
@@ -558,11 +570,11 @@ export function ReceiptDetail({
                         <div className="min-w-0">
                           <p className="truncate text-xs font-medium">{c.transaction.descriptionRaw}</p>
                           <p className="num text-xs" style={{ color: 'var(--text-subtle)' }}>
-                            {formatDate(c.transaction.date)} · {formatMoney(c.transaction.amount, c.transaction.currency)} · {c.score}% fit
+                            {formatDate(c.transaction.date, locale)} · {formatMoney(c.transaction.amount, c.transaction.currency, { locale })} · {t('dt.fit', { pct: c.score })}
                           </p>
                         </div>
                         <button className="btn btn-ghost shrink-0 px-2 py-1 text-xs" onClick={() => linkTo(c.transaction.id)} disabled={busy}>
-                          Link
+                          {t('dt.link')}
                         </button>
                       </li>
                     ))}
@@ -577,9 +589,9 @@ export function ReceiptDetail({
       {/* Audit history */}
       <Card className="overflow-hidden">
         <div className="border-b px-4 py-3">
-          <h2 className="text-sm font-semibold">Audit history</h2>
+          <h2 className="text-sm font-semibold">{t('dt.audit')}</h2>
           <p className="text-xs" style={{ color: 'var(--text-subtle)' }}>
-            Nothing about this receipt changes without a line here.
+            {t('dt.auditNote')}
           </p>
         </div>
         <ul className="divide-y">
@@ -587,7 +599,7 @@ export function ReceiptDetail({
             <li key={entry.id} className="flex flex-wrap items-baseline justify-between gap-2 px-4 py-2.5 text-sm">
               <div className="min-w-0">
                 <span className="font-medium">{entry.actorLabel}</span>{' '}
-                <span style={{ color: 'var(--text-muted)' }}>{entry.action.replace(/[._]/g, ' ')}</span>
+                <span style={{ color: 'var(--text-muted)' }}>{auditLabel(entry.action)}</span>
                 {entry.detail && (
                   <span className="block truncate text-xs" style={{ color: 'var(--text-subtle)' }}>
                     {entry.detail}
@@ -595,7 +607,7 @@ export function ReceiptDetail({
                 )}
               </div>
               <span className="shrink-0 text-xs" style={{ color: 'var(--text-subtle)' }}>
-                {formatDate(entry.createdAt)} · {formatRelative(entry.createdAt)}
+                {formatDate(entry.createdAt, locale)} · {formatRelative(entry.createdAt, locale)}
               </span>
             </li>
           ))}

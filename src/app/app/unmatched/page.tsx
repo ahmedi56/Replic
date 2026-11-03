@@ -4,10 +4,13 @@ import { getAuth } from '@/lib/auth/session';
 import { listUnmatchedReceipts, listUnmatchedTransactions } from '@/lib/services/matching';
 import { Card, ConfidenceBadge, EmptyState } from '@/components/ui';
 import { formatDate, formatMoney } from '@/lib/format';
+import { getLocale, makeT } from '@/lib/i18n/server';
 import { ExportMenu } from '../_components/export-menu';
 import { RematchButton } from '../_components/rematch-button';
 
-export const metadata = { title: 'Unmatched' };
+export async function generateMetadata() {
+  return { title: makeT(await getLocale())('nav.unmatched') };
+}
 export const dynamic = 'force-dynamic';
 
 /**
@@ -20,6 +23,8 @@ export const dynamic = 'force-dynamic';
 export default async function UnmatchedPage({ searchParams }: { searchParams: Promise<{ rp?: string; tp?: string }> }) {
   const auth = await getAuth();
   if (!auth) redirect('/login');
+  const locale = await getLocale();
+  const t = makeT(locale);
 
   const sp = await searchParams;
   const [receiptSide, transactionSide] = await Promise.all([
@@ -31,9 +36,9 @@ export default async function UnmatchedPage({ searchParams }: { searchParams: Pr
     <div className="grid gap-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">Unmatched</h1>
+          <h1 className="text-xl font-semibold tracking-tight">{t('nav.unmatched')}</h1>
           <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
-            What&apos;s left after matching, and which side of the ledger it&apos;s missing from.
+            {t('um.sub')}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -46,14 +51,13 @@ export default async function UnmatchedPage({ searchParams }: { searchParams: Pr
         {/* Receipts with no transaction */}
         <Card className="overflow-hidden">
           <div className="border-b px-5 py-3.5">
-            <h2 className="text-sm font-semibold">Receipts with no transaction</h2>
+            <h2 className="text-sm font-semibold">{t('dash.receiptsNoTx')}</h2>
             <p className="mt-0.5 text-xs" style={{ color: 'var(--text-muted)' }}>
-              <span className="num">{receiptSide.total}</span> · often cash, a personal card, or a statement you
-              haven&apos;t imported yet
+              {t('um.rcNote', { n: receiptSide.total })}
             </p>
           </div>
           {receiptSide.rows.length === 0 ? (
-            <EmptyState title="Nothing here" description="Every receipt has been paired with a transaction." />
+            <EmptyState title={t('um.nothing')} description={t('um.rcNothing')} />
           ) : (
             <ul className="divide-y">
               {receiptSide.rows.map((row) => (
@@ -63,12 +67,12 @@ export default async function UnmatchedPage({ searchParams }: { searchParams: Pr
                       {row.merchantRaw ?? row.originalName}
                     </Link>
                     <p className="text-xs" style={{ color: 'var(--text-subtle)' }}>
-                      {formatDate(row.date)}
+                      {formatDate(row.date, locale)}
                     </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-3">
                     <ConfidenceBadge value={row.overallConfidence} />
-                    <span className="num text-sm font-medium">{formatMoney(row.total, row.currency ?? 'EUR')}</span>
+                    <span className="num text-sm font-medium">{formatMoney(row.total, row.currency ?? 'EUR', { locale })}</span>
                   </div>
                 </li>
               ))}
@@ -79,13 +83,13 @@ export default async function UnmatchedPage({ searchParams }: { searchParams: Pr
         {/* Transactions with no receipt */}
         <Card className="overflow-hidden">
           <div className="border-b px-5 py-3.5">
-            <h2 className="text-sm font-semibold">Transactions with no receipt</h2>
+            <h2 className="text-sm font-semibold">{t('dash.txNoReceipt')}</h2>
             <p className="mt-0.5 text-xs" style={{ color: 'var(--text-muted)' }}>
-              <span className="num">{transactionSide.total}</span> · missing paperwork, fees, or transfers
+              {t('um.txNote', { n: transactionSide.total })}
             </p>
           </div>
           {transactionSide.rows.length === 0 ? (
-            <EmptyState title="Nothing here" description="Every transaction has a receipt against it." />
+            <EmptyState title={t('um.nothing')} description={t('um.txNothing')} />
           ) : (
             <ul className="divide-y">
               {transactionSide.rows.map((row) => (
@@ -95,12 +99,12 @@ export default async function UnmatchedPage({ searchParams }: { searchParams: Pr
                       {row.descriptionRaw}
                     </p>
                     <p className="text-xs" style={{ color: 'var(--text-subtle)' }}>
-                      {formatDate(row.date)}
+                      {formatDate(row.date, locale)}
                     </p>
                   </div>
                   <span className="num shrink-0 text-sm font-medium" style={{ color: row.amount > 0 ? 'var(--accent-ink)' : undefined }}>
                     {row.amount < 0 ? '−' : '+'}
-                    {formatMoney(row.amount, row.currency)}
+                    {formatMoney(row.amount, row.currency, { locale })}
                   </span>
                 </li>
               ))}

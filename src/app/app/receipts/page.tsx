@@ -4,12 +4,15 @@ import { getAuth } from '@/lib/auth/session';
 import { listReceipts } from '@/lib/services/receipts';
 import { listCategories } from '@/lib/services/org';
 import { Card, ConfidenceBadge, EmptyState, StatusBadge } from '@/components/ui';
-import { formatDate, formatMoney } from '@/lib/format';
+import { formatDate, formatMoney, formatNumber } from '@/lib/format';
+import { getLocale, makeT } from '@/lib/i18n/server';
 import { SearchBar, FilterSelect } from '../_components/search-bar';
 import { ServerPagination } from '../_components/server-pagination';
 import { ExportMenu } from '../_components/export-menu';
 
-export const metadata = { title: 'Receipts' };
+export async function generateMetadata() {
+  return { title: makeT(await getLocale())('nav.receipts') };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function ReceiptsPage({
@@ -19,6 +22,8 @@ export default async function ReceiptsPage({
 }) {
   const auth = await getAuth();
   if (!auth) redirect('/login');
+  const locale = await getLocale();
+  const t = makeT(locale);
 
   const sp = await searchParams;
   const [result, categories] = await Promise.all([
@@ -39,45 +44,45 @@ export default async function ReceiptsPage({
     <div className="grid gap-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">Receipts</h1>
+          <h1 className="text-xl font-semibold tracking-tight">{t('nav.receipts')}</h1>
           <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
-            <span className="num">{result.total.toLocaleString('en-GB')}</span> receipt{result.total === 1 ? '' : 's'}
+            {result.total === 1 ? t('rc.countOne') : t('rc.countMany', { n: formatNumber(result.total, locale) })}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <ExportMenu />
           <Link href="/app/upload" className="btn btn-accent">
-            Upload
+            {t('rc.upload')}
           </Link>
         </div>
       </div>
 
-      <SearchBar placeholder="Search merchant, invoice number or amount…">
+      <SearchBar placeholder={t('rc.search')}>
         <FilterSelect
           name="status"
-          label="Status"
+          label={t('flt.status')}
           options={[
-            { value: '', label: 'All statuses' },
-            { value: 'completed', label: 'Matched' },
-            { value: 'needs_review', label: 'Needs review' },
-            { value: 'failed', label: 'Failed' },
-            { value: 'duplicates', label: 'Duplicates' },
+            { value: '', label: t('flt.allStatuses') },
+            { value: 'completed', label: t('nav.matched') },
+            { value: 'needs_review', label: t('nav.review') },
+            { value: 'failed', label: t('status.failed') },
+            { value: 'duplicates', label: t('flt.duplicates') },
           ]}
         />
         <FilterSelect
           name="category"
-          label="Category"
-          options={[{ value: '', label: 'All categories' }, ...categories.map((c) => ({ value: c.id, label: c.name }))]}
+          label={t('flt.category')}
+          options={[{ value: '', label: t('flt.allCategories') }, ...categories.map((c) => ({ value: c.id, label: c.name }))]}
         />
         <FilterSelect
           name="sort"
-          label="Sort"
+          label={t('flt.sort')}
           options={[
-            { value: 'newest', label: 'Newest' },
-            { value: 'oldest', label: 'Oldest' },
-            { value: 'amount_desc', label: 'Highest amount' },
-            { value: 'amount_asc', label: 'Lowest amount' },
-            { value: 'confidence_asc', label: 'Lowest confidence' },
+            { value: 'newest', label: t('sort.newest') },
+            { value: 'oldest', label: t('sort.oldest') },
+            { value: 'amount_desc', label: t('sort.amountDesc') },
+            { value: 'amount_asc', label: t('sort.amountAsc') },
+            { value: 'confidence_asc', label: t('sort.confAsc') },
           ]}
         />
       </SearchBar>
@@ -85,20 +90,20 @@ export default async function ReceiptsPage({
       <Card className="overflow-hidden">
         {result.rows.length === 0 ? (
           <EmptyState
-            title={filtered ? 'No receipts match those filters' : 'No receipts yet'}
+            title={filtered ? t('rc.emptyFiltered') : t('rc.empty')}
             description={
               filtered
-                ? 'Try clearing a filter or searching for something else.'
-                : 'Drop your receipts in and Reclip will read them and pair them with your bank transactions.'
+                ? t('rc.emptyFilteredBody')
+                : t('rc.emptyBody')
             }
             action={
               filtered ? (
                 <Link href="/app/receipts" className="btn btn-ghost">
-                  Clear filters
+                  {t('rc.clearFilters')}
                 </Link>
               ) : (
                 <Link href="/app/upload" className="btn btn-accent">
-                  Upload receipts
+                  {t('nav.upload')}
                 </Link>
               )
             }
@@ -109,12 +114,12 @@ export default async function ReceiptsPage({
               <table className="w-full min-w-[760px]">
                 <thead className="border-b" style={{ background: 'var(--surface-sunken)' }}>
                   <tr>
-                    <th className="table-head">Merchant</th>
-                    <th className="table-head">Date</th>
-                    <th className="table-head text-right">Amount</th>
-                    <th className="table-head">Category</th>
-                    <th className="table-head">Status</th>
-                    <th className="table-head text-right">Extraction</th>
+                    <th className="table-head">{t('col.merchant')}</th>
+                    <th className="table-head">{t('col.date')}</th>
+                    <th className="table-head text-right">{t('col.amount')}</th>
+                    <th className="table-head">{t('col.category')}</th>
+                    <th className="table-head">{t('col.status')}</th>
+                    <th className="table-head text-right">{t('col.extraction')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
@@ -131,10 +136,10 @@ export default async function ReceiptsPage({
                         )}
                       </td>
                       <td className="table-cell whitespace-nowrap" style={{ color: 'var(--text-muted)' }}>
-                        {formatDate(row.date)}
+                        {formatDate(row.date, locale)}
                       </td>
                       <td className="table-cell num whitespace-nowrap text-right font-medium">
-                        {formatMoney(row.total, row.currency ?? 'EUR')}
+                        {formatMoney(row.total, row.currency ?? 'EUR', { locale })}
                       </td>
                       <td className="table-cell">
                         {row.categoryName ? (

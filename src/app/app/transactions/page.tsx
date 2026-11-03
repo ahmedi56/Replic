@@ -3,11 +3,14 @@ import Link from 'next/link';
 import { getAuth } from '@/lib/auth/session';
 import { listTransactions, listImports } from '@/lib/services/imports';
 import { Card, EmptyState } from '@/components/ui';
-import { formatDate, formatMoney, formatRelative } from '@/lib/format';
+import { formatDate, formatMoney, formatNumber, formatRelative } from '@/lib/format';
+import { getLocale, makeT } from '@/lib/i18n/server';
 import { SearchBar, FilterSelect } from '../_components/search-bar';
 import { ServerPagination } from '../_components/server-pagination';
 
-export const metadata = { title: 'Transactions' };
+export async function generateMetadata() {
+  return { title: makeT(await getLocale())('nav.transactions') };
+}
 export const dynamic = 'force-dynamic';
 
 export default async function TransactionsPage({
@@ -17,6 +20,8 @@ export default async function TransactionsPage({
 }) {
   const auth = await getAuth();
   if (!auth) redirect('/login');
+  const locale = await getLocale();
+  const t = makeT(locale);
 
   const sp = await searchParams;
   const [result, importHistory] = await Promise.all([
@@ -28,26 +33,25 @@ export default async function TransactionsPage({
     <div className="grid gap-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">Transactions</h1>
+          <h1 className="text-xl font-semibold tracking-tight">{t('nav.transactions')}</h1>
           <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
-            <span className="num">{result.total.toLocaleString('en-GB')}</span> imported transaction
-            {result.total === 1 ? '' : 's'}
+            {result.total === 1 ? t('tx.countOne') : t('tx.countMany', { n: formatNumber(result.total, locale) })}
           </p>
         </div>
         <Link href="/app/import" className="btn btn-accent">
-          Import CSV
+          {t('tx.import')}
         </Link>
       </div>
 
-      <SearchBar placeholder="Search description or amount…">
+      <SearchBar placeholder={t('tx.search')}>
         <FilterSelect
           name="sort"
-          label="Sort"
+          label={t('flt.sort')}
           options={[
-            { value: 'newest', label: 'Newest' },
-            { value: 'oldest', label: 'Oldest' },
-            { value: 'amount_desc', label: 'Largest spend' },
-            { value: 'amount_asc', label: 'Largest income' },
+            { value: 'newest', label: t('sort.newest') },
+            { value: 'oldest', label: t('sort.oldest') },
+            { value: 'amount_desc', label: t('sort.spend') },
+            { value: 'amount_asc', label: t('sort.income') },
           ]}
         />
       </SearchBar>
@@ -55,12 +59,12 @@ export default async function TransactionsPage({
       <Card className="overflow-hidden">
         {result.rows.length === 0 ? (
           <EmptyState
-            title={sp.q ? 'No transactions match' : 'No transactions yet'}
-            description={sp.q ? 'Try a different search.' : 'Import a bank CSV and Reclip will normalize the descriptions and match them to your receipts.'}
+            title={sp.q ? t('tx.emptyFiltered') : t('tx.empty')}
+            description={sp.q ? t('tx.tryOther') : t('tx.emptyBody')}
             action={
               !sp.q ? (
                 <Link href="/app/import" className="btn btn-accent">
-                  Import bank CSV
+                  {t('nav.import')}
                 </Link>
               ) : undefined
             }
@@ -71,10 +75,10 @@ export default async function TransactionsPage({
               <table className="w-full min-w-[720px]">
                 <thead className="border-b" style={{ background: 'var(--surface-sunken)' }}>
                   <tr>
-                    <th className="table-head">Description</th>
-                    <th className="table-head">Normalized merchant</th>
-                    <th className="table-head">Date</th>
-                    <th className="table-head text-right">Amount</th>
+                    <th className="table-head">{t('col.description')}</th>
+                    <th className="table-head">{t('col.normalized')}</th>
+                    <th className="table-head">{t('col.date')}</th>
+                    <th className="table-head text-right">{t('col.amount')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
@@ -88,14 +92,14 @@ export default async function TransactionsPage({
                         {row.merchantNorm || '-'}
                       </td>
                       <td className="table-cell whitespace-nowrap" style={{ color: 'var(--text-muted)' }}>
-                        {formatDate(row.date)}
+                        {formatDate(row.date, locale)}
                       </td>
                       <td
                         className="table-cell num whitespace-nowrap text-right font-medium"
                         style={{ color: row.amount > 0 ? 'var(--accent-ink)' : undefined }}
                       >
                         {row.amount < 0 ? '−' : '+'}
-                        {formatMoney(row.amount, row.currency)}
+                        {formatMoney(row.amount, row.currency, { locale })}
                       </td>
                     </tr>
                   ))}
@@ -110,7 +114,7 @@ export default async function TransactionsPage({
       {importHistory.length > 0 && (
         <Card className="overflow-hidden">
           <div className="border-b px-5 py-3.5">
-            <h2 className="text-sm font-semibold">Import history</h2>
+            <h2 className="text-sm font-semibold">{t('tx.history')}</h2>
           </div>
           <ul className="divide-y">
             {importHistory.map((imp) => (
@@ -118,12 +122,12 @@ export default async function TransactionsPage({
                 <div className="min-w-0">
                   <p className="truncate font-medium">{imp.filename}</p>
                   <p className="text-xs" style={{ color: 'var(--text-subtle)' }}>
-                    {imp.accountName ?? 'Unassigned account'} · {formatRelative(imp.createdAt)}
+                    {imp.accountName ?? t('tx.unassigned')} · {formatRelative(imp.createdAt, locale)}
                   </p>
                 </div>
                 <p className="num text-xs" style={{ color: 'var(--text-muted)' }}>
-                  {imp.importedCount} imported
-                  {imp.skippedCount > 0 && ` · ${imp.skippedCount} already present`}
+                  {t('tx.imported', { n: imp.importedCount })}
+                  {imp.skippedCount > 0 && ` · ${t('tx.already', { n: imp.skippedCount })}`}
                 </p>
               </li>
             ))}

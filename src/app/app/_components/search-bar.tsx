@@ -3,9 +3,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useDebounced } from '@/components/ui';
+import { useT } from '@/lib/i18n/client';
 
 /** Debounced, URL-backed search so results are shareable and the back button works. */
-export function SearchBar({ placeholder = 'Search…', children }: { placeholder?: string; children?: React.ReactNode }) {
+export function SearchBar({ placeholder, children }: { placeholder?: string; children?: React.ReactNode }) {
+  const t = useT();
+  const hint = placeholder ?? t('search.default');
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -53,10 +56,10 @@ export function SearchBar({ placeholder = 'Search…', children }: { placeholder
         <input
           type="search"
           className="input pl-9"
-          placeholder={placeholder}
+          placeholder={hint}
           value={value}
           onChange={(e) => setValue(e.target.value)}
-          aria-label={placeholder}
+          aria-label={hint}
         />
       </div>
       {children}
